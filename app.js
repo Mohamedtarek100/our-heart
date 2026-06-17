@@ -49,10 +49,10 @@ docSnap.data().status+"<br>"+docSnap.data().time;
 
 });
 
-onSnapshot(doc(db,"status","Yomna"),(docSnap)=>{
+onSnapshot(doc(db,"status","yomna"),(docSnap)=>{
 
 if(docSnap.exists()){
-document.getElementById("YomnaStatus").innerHTML=
+document.getElementById("yomnaStatus").innerHTML=
 docSnap.data().status+"<br>"+docSnap.data().time;
 }
 
@@ -67,10 +67,10 @@ docSnap.data().message;
 
 });
 
-onSnapshot(doc(db,"messages","Yomna"),(docSnap)=>{
+onSnapshot(doc(db,"messages","yomna"),(docSnap)=>{
 
 if(docSnap.exists()){
-document.getElementById("YomnaMessage").innerHTML=
+document.getElementById("yomnaMessage").innerHTML=
 docSnap.data().message;
 }
 

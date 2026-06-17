@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>❤️ Our Status</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<h1>❤️ حالتنا اليومية ❤️</h1>
+
+<div class="container">
+
+<div class="card">
+<h2>Mohamed</h2>
+
+<div class="buttons">
+<button onclick="updateStatus('mohamed','🏢 نزل الشغل')">🏢 نزل الشغل</button>
+<button onclick="updateStatus('mohamed','🍽️ اتغدى')">🍽️ اتغدى</button>
+<button onclick="updateStatus('mohamed','🏠 وصل البيت')">🏠 وصل البيت</button>
+<button onclick="updateStatus('mohamed','😴 هينام')">😴 هينام</button>
+<button onclick="updateStatus('mohamed','❤️ أنا بخير')">❤️ أنا بخير</button>
+</div>
+
+<h3>آخر حالة</h3>
+<p id="mohamedStatus"></p>
+
+<textarea id="mohamedMsg" placeholder="رسالة قصيرة..."></textarea>
+<button onclick="sendMessage('mohamed')">إرسال ❤️</button>
+
+<p id="mohamedMessage"></p>
+
+</div>
+
+
+<div class="card">
+
+<h2>Yomna</h2>
+
+<div class="buttons">
+<button onclick="updateStatus('yomna','📚 نزلت الدرس')">📚 نزلت الدرس</button>
+<button onclick="updateStatus('yomna','🍽️ اتغدت')">🍽️ اتغدت</button>
+<button onclick="updateStatus('yomna','🏠 وصلت البيت')">🏠 وصلت البيت</button>
+<button onclick="updateStatus('yomna','😴 هتنام')">😴 هتنام</button>
+<button onclick="updateStatus('yomna','❤️ أنا بخير')">❤️ أنا بخير</button>
+</div>
+
+<h3>آخر حالة</h3>
+<p id="yomnaStatus"></p>
+
+<textarea id="yomnaMsg" placeholder="رسالة قصيرة..."></textarea>
+<button onclick="sendMessage('yomna')">إرسال ❤️</button>
+
+<p id="yomnaMessage"></p>
+
+</div>
+
+</div>
+
+<script type="module" src="app.js"></script>
+
+</body>
+</html>

@@ -1,10 +1,15 @@
-import { initializeApp } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js";
-
+import { initializeApp }
+from "https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js";
 import {
-getFirestore,
-doc,
-setDoc,
-onSnapshot
+  getFirestore,
+  doc,
+  setDoc,
+  onSnapshot,
+  collection,
+  addDoc,
+  query,
+  orderBy,
+  updateDoc
 }
 from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
 
@@ -19,59 +24,404 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
+window.updateOnlineStatus = async function(){
 
-window.updateStatus = async function(person,status){
+await setDoc(
+doc(db,"online",currentUser),
+{
+online:true,
+lastSeen:Date.now()
+}
+);
 
-await setDoc(doc(db,"status",person),{
-status:status,
-time:new Date().toLocaleString()
-});
+}
+
+window.typing = async function(){
+
+await setDoc(
+doc(db,"typing",currentUser),
+{
+typing:true
+}
+);
+
+setTimeout(async ()=>{
+
+await setDoc(
+doc(db,"typing",currentUser),
+{
+typing:false
+}
+);
+
+},2000);
+
+}
+
+
+// اختيار المستخدم
+let currentUser = localStorage.getItem("currentUser");
+
+const mainApp = document.getElementById("mainApp");
+const userSelector = document.getElementById("userSelector");
+
+if (currentUser === "Mohamed" || currentUser === "Yomna") {
+
+  mainApp.style.display = "block";
+  userSelector.style.display = "none";
+  updateOnlineStatus();
+
+}
+
+document.getElementById("mohamedBtn").onclick = () => {
+
+  currentUser = "Mohamed";
+
+  localStorage.setItem(
+    "currentUser",
+    currentUser
+  );
+
+  location.reload();
 
 };
 
-window.sendMessage = async function(person){
+document.getElementById("yomnaBtn").onclick = () => {
 
-let message=document.getElementById(person+"Msg").value;
+  currentUser = "Yomna";
 
-await setDoc(doc(db,"messages",person),{
-message:message,
-time:new Date().toLocaleString()
-});
+  localStorage.setItem(
+    "currentUser",
+    currentUser
+  );
+
+  location.reload();
 
 };
 
-onSnapshot(doc(db,"status","mohamed"),(docSnap)=>{
 
-if(docSnap.exists()){
-document.getElementById("mohamedStatus").innerHTML=
-docSnap.data().status+"<br>"+docSnap.data().time;
+// تحديث الحالة
+window.updateStatus = async function (person, status) {
+
+  await setDoc(
+    doc(db, "status", person),
+    {
+      status: status,
+      time: new Date().toLocaleString()
+    }
+  );
+
+};
+
+
+// إرسال رسالة
+window.sendMessage = async function () {
+
+  let text = document
+    .getElementById("messageInput")
+    .value
+    .trim();
+
+  if (text === "") return;
+
+await addDoc(
+  collection(db, "chat"),
+  {
+    sender: currentUser,
+    text: text,
+    time: Date.now(),
+    status: "delivered",
+    seen: false,
+    reaction: ""
+  }
+);
+
+  document.getElementById("messageInput").value = "";
+
+};
+
+
+// حالة محمد
+onSnapshot(
+  doc(db, "status", "mohamed"),
+  (docSnap) => {
+
+    if (docSnap.exists()) {
+
+      document.getElementById("mohamedStatus").innerHTML =
+        docSnap.data().status +
+        "<br>" +
+        docSnap.data().time;
+
+    }
+
+  }
+);
+
+
+// حالة يمنى
+onSnapshot(
+  doc(db, "status", "yomna"),
+  (docSnap) => {
+
+    if (docSnap.exists()) {
+
+      document.getElementById("yomnaStatus").innerHTML =
+        docSnap.data().status +
+        "<br>" +
+        docSnap.data().time;
+
+    }
+
+  }
+);
+
+
+// الشات
+const q = query(
+  collection(db, "chat"),
+  orderBy("time")
+);
+
+onSnapshot(q, (snapshot) => {
+
+  let html = "";
+
+  snapshot.forEach((docSnap) => {
+
+    let msg = docSnap.data();
+    let messageId = docSnap.id;
+    if (
+msg.sender !== currentUser &&
+!msg.seen
+){
+
+updateDoc(
+docSnap.ref,
+{
+seen:true
+}
+);
+
 }
 
+    if (
+      Date.now() - msg.time <
+      48 * 60 * 60 * 1000
+    ) {
+
+      let checkMark =
+msg.seen
+?
+"✓✓ Seen"
+:
+"✓ Delivered";
+
+if (msg.seen) {
+
+  checkMark = "✓✓ Seen";
+
+}
+let cls =
+  msg.sender === currentUser
+    ? "message me"
+    : "message her";
+html += `
+<div class="message ${cls}">
+
+  <div>
+    ${msg.text}
+  </div>
+
+  <small>
+
+    ${msg.sender}
+
+    -
+
+    ${new Date(msg.time).toLocaleTimeString()}
+
+    <br>
+
+    ${checkMark}
+
+  </small>
+
+  <div class="reaction">
+    ${msg.reaction || ""}
+  </div>
+
+  <div class="reactionButtons">
+
+    <button onclick="reactMessage('${messageId}','❤️')">
+      ❤️
+    </button>
+
+    <button onclick="reactMessage('${messageId}','😂')">
+      😂
+    </button>
+
+    <button onclick="reactMessage('${messageId}','🫂')">
+      🫂
+    </button>
+
+    <button onclick="reactMessage('${messageId}','🥺')">
+      🥺
+    </button>
+
+  </div>
+
+</div>
+`;
+
+    }
+
+  });
+
+  document.getElementById("chatBox").innerHTML = html;
+
+  document.getElementById("chatBox").scrollTop =
+    document.getElementById("chatBox").scrollHeight;
+
 });
+window.reactMessage = async function(messageId, emoji){
 
-onSnapshot(doc(db,"status","yomna"),(docSnap)=>{
+  await updateDoc(
+    doc(db, "chat", messageId),
+    {
+      reaction: emoji
+    }
+  );
 
-if(docSnap.exists()){
-document.getElementById("yomnaStatus").innerHTML=
-docSnap.data().status+"<br>"+docSnap.data().time;
+}
+window.changeUser = function(){
+
+localStorage.removeItem("currentUser");
+
+location.reload();
+
+}
+let otherUser =
+currentUser === "Mohamed"
+?
+"Yomna"
+:
+"Mohamed";
+
+
+onSnapshot(
+
+doc(
+db,
+"typing",
+otherUser
+),
+
+(docSnap)=>{
+
+if(
+
+docSnap.exists()
+
+&&
+
+docSnap.data().typing
+
+){
+
+document.getElementById(
+
+"typingStatus"
+
+).innerHTML =
+
+"✍️ " +
+
+otherUser +
+
+" is typing...";
+
 }
 
-});
+else{
 
-onSnapshot(doc(db,"messages","mohamed"),(docSnap)=>{
+document.getElementById(
 
-if(docSnap.exists()){
-document.getElementById("mohamedMessage").innerHTML=
-docSnap.data().message;
+"typingStatus"
+
+).innerHTML = "";
+
 }
 
-});
-
-onSnapshot(doc(db,"messages","yomna"),(docSnap)=>{
-
-if(docSnap.exists()){
-document.getElementById("yomnaMessage").innerHTML=
-docSnap.data().message;
 }
 
-});
+);
+onSnapshot(
+
+doc(
+db,
+"online",
+otherUser
+),
+
+(docSnap)=>{
+
+if(docSnap.exists()){
+
+let data = docSnap.data();
+
+if(data.online){
+
+document.getElementById(
+"onlineStatus"
+).innerHTML =
+
+"🟢 Online";
+
+}
+else{
+
+document.getElementById(
+"onlineStatus"
+).innerHTML =
+
+"Last seen " +
+
+new Date(
+data.lastSeen
+).toLocaleTimeString();
+
+}
+
+}
+
+}
+
+);
+window.addEventListener(
+
+"beforeunload",
+
+async ()=>{
+
+await setDoc(
+
+doc(
+db,
+"online",
+currentUser
+),
+
+{
+
+online:false,
+
+lastSeen:Date.now()
+
+}
+
+);
+
+}
+
+);

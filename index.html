@@ -1,64 +1,283 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
+
 <head>
+
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>❤️ Our Status</title>
-<link rel="stylesheet" href="style.css?v=1">
+
+<meta
+name="viewport"
+content="width=device-width, initial-scale=1.0"
+>
+
+<title>❤️ Our Heart</title>
+
+<link
+rel="stylesheet"
+href="style.css?v=2"
+>
+
 </head>
+
 <body>
 
-<h1>❤️ حالتنا اليومية ❤️</h1>
+
+<!-- اختيار الحساب -->
+
+<div id="userSelector">
+
+<h1>
+
+❤️ اختر حسابك ❤️
+
+</h1>
+
+<button id="mohamedBtn">
+
+❤️ Mohamed
+
+</button>
+
+<button id="yomnaBtn">
+
+❤️ Yomna
+
+</button>
+
+</div>
+
+
+
+<!-- التطبيق -->
+
+<div id="mainApp">
+
+
+<h1>
+
+❤️ حالتنا اليومية ❤️
+
+</h1>
+
+
 
 <div class="container">
 
-<div class="card">
-<h2>Mohamed</h2>
 
-<div class="buttons">
-<button onclick="updateStatus('mohamed','🏢 نزل الشغل')">🏢 نزل الشغل</button>
-<button onclick="updateStatus('mohamed','🍽️ اتغدى')">🍽️ اتغدى</button>
-<button onclick="updateStatus('mohamed','🏠 وصل البيت')">🏠 وصل البيت</button>
-<button onclick="updateStatus('mohamed','😴 هينام')">😴 هينام</button>
-<button onclick="updateStatus('mohamed','❤️ أنا بخير')">❤️ أنا بخير</button>
-</div>
-
-<h3>آخر حالة</h3>
-<p id="mohamedStatus"></p>
-
-<textarea id="mohamedMsg" placeholder="رسالة قصيرة..."></textarea>
-<button onclick="sendMessage('mohamed')">إرسال ❤️</button>
-
-<p id="mohamedMessage"></p>
-
-</div>
-
+<!-- بطاقة محمد -->
 
 <div class="card">
 
-<h2>Yomna</h2>
+<h2>
+
+Mohamed
+
+</h2>
+
 
 <div class="buttons">
-<button onclick="updateStatus('yomna','📚 نزلت الدرس')">📚 نزلت الدرس</button>
-<button onclick="updateStatus('yomna','🍽️ اتغدت')">🍽️ اتغدت</button>
-<button onclick="updateStatus('yomna','🏠 وصلت البيت')">🏠 وصلت البيت</button>
-<button onclick="updateStatus('yomna','😴 هتنام')">😴 هتنام</button>
-<button onclick="updateStatus('yomna','❤️ أنا بخير')">❤️ أنا بخير</button>
+
+<button onclick="updateStatus('mohamed','🏢 نازل الشغل يا عمري انا')">
+
+🏢 نازل الشغل يا عمري انا
+
+</button>
+
+
+<button onclick="updateStatus('mohamed','🍽️ هتغدي يا قلبي ')">
+
+🍽️ هتغدي يا قلبي 
+
+</button>
+
+<button onclick="updateStatus('mohamed','نازل اجيب حجات من تحت قطتي 🫂')">
+
+نازل اجيب حجات من تحت قطتي 🫂
+
+</button>
+
+
+
+<button onclick="updateStatus('mohamed','🏠 وصلت البيت يا صغنوثه')">
+
+🏠 وصلت البيت يا صغنوثه
+
+</button>
+
+
+<button onclick="updateStatus('mohamed','😴 هنام يا نونتي ')">
+
+😴 هنام يا نونتي 
+
+</button>
+
+<button onclick="updateStatus('mohamed','انا مش كويس 🥺')">
+
+ انا مش كويس 🥺
+
+</button>
+
+<button onclick="updateStatus('mohamed','❤️ انا كويس يا روحي ')">
+
+❤️ انا كويس يا روحي 
+
+</button>
+
 </div>
 
-<h3>آخر حالة</h3>
-<p id="yomnaStatus"></p>
 
-<textarea id="yomnaMsg" placeholder="رسالة قصيرة..."></textarea>
-<button onclick="sendMessage('yomna')">إرسال ❤️</button>
+<h3>
 
-<p id="yomnaMessage"></p>
+آخر حالة
+
+</h3>
+
+
+<p id="mohamedStatus">
+
+</p>
 
 </div>
 
+
+
+
+
+<!-- بطاقة يمنى -->
+
+<div class="card">
+
+<h2>
+
+Yomna
+
+</h2>
+
+
+<div class="buttons">
+
+<button onclick="updateStatus('yomna','📚 نازله الدرس يا حبيبي ')">
+
+📚 نازله الدرس يا حبيبي 
+
+</button>
+
+
+<button onclick="updateStatus('yomna','🍽️ هتغدي يا قلبي ')">
+
+🍽️ هتغدي يا قلبي 
+
+</button>
+
+<button onclick="updateStatus('mohamed','نازله اشتري حجات من تحت حبيبي 🫂 ')">
+
+نازله اشتري حجات من تحت حبيبي 🫂
+
+</button>
+
+
+<button onclick="updateStatus('yomna','🏠 وصلت البيت يا بيبي')">
+
+🏠 وصلت البيت يا بيبي
+
+</button>
+
+
+<button onclick="updateStatus('yomna','😴 هنام يا حبيبي ')">
+
+😴 هنام يا حبيبي 
+
+</button>
+
+
+<button onclick="updateStatus('mohamed','انا مش كويسه🥺')">
+
+انا مش كويسه🥺
+
+</button>
+
+<button onclick="updateStatus('yomna','❤️ أنا كويسه كتكوتي')">
+
+❤️ أنا كويسه كتكوتي
+
+</button>
+
 </div>
 
-<script type="module" src="app.js?v=1"></script>
+
+<h3>
+
+آخر حالة
+
+</h3>
+
+
+<p id="yomnaStatus">
+
+</p>
+
+</div>
+
+
+</div>
+
+
+
+<h2>
+
+💬 الشات
+
+</h2>
+<p id="onlineStatus"></p>
+<p id="typingStatus"></p>
+<div id="chatBox">
+
+</div>
+
+
+<textarea
+
+id="messageInput"
+
+placeholder="اكتب رسالة..."
+
+oninput="typing()"
+
+>
+
+</textarea>
+
+
+<button
+
+id="sendBtn"
+
+onclick="sendMessage()"
+
+>
+
+❤️ إرسال
+
+</button>
+
+
+</div>
+
+
+<script
+type="module"
+src="app.js?v=2"
+>
+
+</script>
 
 </body>
+
 </html>
+<button onclick="changeUser()">
+🔄 change account
+</button>
+
+<link rel="stylesheet" href="style.css?v=2">
+
+<script type="module" src="app.js?v=2"></script>

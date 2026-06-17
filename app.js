@@ -25,16 +25,21 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 window.updateOnlineStatus = async function(){
+  
 
 await setDoc(
 doc(db,"online",currentUser),
 {
-online:true,
 lastSeen:Date.now()
 }
 );
 
 }
+setInterval(() => {
+
+  updateOnlineStatus();
+
+}, 10000);
 
 window.typing = async function(){
 
@@ -370,16 +375,14 @@ if(docSnap.exists()){
 
 let data = docSnap.data();
 
-if(data.online){
+if (Date.now() - data.lastSeen < 30000) {
 
-document.getElementById(
-"onlineStatus"
-).innerHTML =
-
-"🟢 Online";
+  document.getElementById(
+    "onlineStatus"
+  ).innerHTML = "🟢 Online";
 
 }
-else{
+else {
 
 document.getElementById(
 "onlineStatus"

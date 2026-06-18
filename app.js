@@ -24,6 +24,9 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
+let mediaRecorder;
+let audioChunks = [];
+let isRecording = false;
 window.updateOnlineStatus = async function(){
   
 
@@ -235,7 +238,17 @@ html += `
 <div class="message ${cls}">
 
   <div>
-    ${msg.text}
+    ${
+msg.voiceUrl
+?
+`
+<audio controls>
+<source src="${msg.voiceUrl}">
+</audio>
+`
+:
+msg.text
+}
   </div>
 
   <small>
@@ -428,3 +441,80 @@ lastSeen:Date.now()
 }
 
 );
+window.toggleRecording = async function () {
+
+  if (!isRecording) {
+
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: true
+    });
+
+    mediaRecorder = new MediaRecorder(stream);
+
+    audioChunks = [];
+
+    mediaRecorder.ondataavailable = (event) => {
+      audioChunks.push(event.data);
+    };
+
+    mediaRecorder.onstop = async () => {
+
+      const audioBlob = new Blob(audioChunks, {
+        type: "audio/webm"
+      });
+
+      const formData = new FormData();
+
+      formData.append(
+        "file",
+        audioBlob,
+        "voice.webm"
+      );
+
+      const response = await fetch(
+        "https://ourheartfunctions2026.azurewebsites.net/api/uploadVoice",
+        {
+          method: "POST",
+          body: formData
+        }
+      );
+
+      const result = await response.json();
+      console.log(result);
+
+      await addDoc(
+        collection(db, "chat"),
+        {
+          sender: currentUser,
+          voiceUrl: result.url,
+          time: Date.now(),
+          seen: false,
+          reaction: ""
+        }
+      );
+
+    };
+
+    mediaRecorder.start();
+
+    isRecording = true;
+
+    document.getElementById(
+      "recordBtn"
+    ).innerHTML = "⏹️ إيقاف";
+
+  }
+
+  else {
+
+    mediaRecorder.stop();
+
+    isRecording = false;
+
+    document.getElementById(
+      "recordBtn"
+    ).innerHTML = "🎤 تسجيل صوت";
+
+  }
+
+};

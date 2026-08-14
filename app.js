@@ -9,9 +9,10 @@ import {
   addDoc,
   query,
   orderBy,
+  where,
+  limitToLast,
   updateDoc
-}
-from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
+} from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyD9XAlpeDn4UFp-0taUmCvUm86XkPTNboM",
@@ -188,7 +189,8 @@ onSnapshot(
 // الشات
 const q = query(
   collection(db, "chat"),
-  orderBy("time")
+  orderBy("time"),
+  limitToLast(30)
 );
 
 onSnapshot(q, (snapshot) => {

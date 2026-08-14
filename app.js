@@ -126,26 +126,44 @@ window.updateStatus = async function (person, status) {
 // إرسال رسالة
 window.sendMessage = async function () {
 
-  let text = document
-    .getElementById("messageInput")
-    .value
-    .trim();
+  const input = document.getElementById("messageInput");
+
+  const text = input.value.trim();
 
   if (text === "") return;
 
-await addDoc(
-  collection(db, "chat"),
-  {
-    sender: currentUser,
-    text: text,
-    time: Date.now(),
-    status: "delivered",
-    seen: false,
-    reaction: ""
-  }
-);
+  try {
 
-  document.getElementById("messageInput").value = "";
+    const response = await fetch(
+      "https://ourheartfunctions2026.azurewebsites.net/api/sendchat",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          sender: currentUser,
+          text: text
+        })
+      }
+    );
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      console.error("Send message error:", result);
+      return;
+    }
+
+    input.value = "";
+
+    console.log("Message sent:", result);
+
+  } catch (error) {
+
+    console.error("Failed to send message:", error);
+
+  }
 
 };
 
@@ -186,124 +204,118 @@ onSnapshot(
 );
 
 
-// الشات
-const q = query(
-  collection(db, "chat"),
-  orderBy("time"),
-  limitToLast(30)
-);
+// الشات - Cosmos DB
+async function loadChat() {
+  try {
 
-onSnapshot(q, (snapshot) => {
+    const response = await fetch(
+      "https://ourheartfunctions2026.azurewebsites.net/api/getchat"
+    );
 
-  let html = "";
+    const messages = await response.json();
 
-  snapshot.forEach((docSnap) => {
-
-    let msg = docSnap.data();
-    let messageId = docSnap.id;
-    if (
-msg.sender !== currentUser &&
-!msg.seen
-){
-
-updateDoc(
-docSnap.ref,
-{
-seen:true
-}
-);
-
-}
-
-    if (
-      Date.now() - msg.time <
-      48 * 60 * 60 * 1000
-    ) {
-
-      let checkMark =
-msg.seen
-?
-"✓✓ Seen"
-:
-"✓ Delivered";
-
-if (msg.seen) {
-
-  checkMark = "✓✓ Seen";
-
-}
-let cls =
-  msg.sender === currentUser
-    ? "message me"
-    : "message her";
-html += `
-<div class="message ${cls}">
-
-  <div>
-    ${
-msg.voiceUrl
-?
-`
-<audio controls>
-<source src="${msg.voiceUrl}">
-</audio>
-`
-:
-msg.text
-}
-  </div>
-
-  <small>
-
-    ${msg.sender}
-
-    -
-
-    ${new Date(msg.time).toLocaleTimeString()}
-
-    <br>
-
-    ${checkMark}
-
-  </small>
-
-  <div class="reaction">
-    ${msg.reaction || ""}
-  </div>
-
-  <div class="reactionButtons">
-
-    <button onclick="reactMessage('${messageId}','❤️')">
-      ❤️
-    </button>
-
-    <button onclick="reactMessage('${messageId}','😂')">
-      😂
-    </button>
-
-    <button onclick="reactMessage('${messageId}','🫂')">
-      🫂
-    </button>
-
-    <button onclick="reactMessage('${messageId}','🥺')">
-      🥺
-    </button>
-
-  </div>
-
-</div>
-`;
-
+    if (!response.ok) {
+      console.error("Get chat error:", messages);
+      return;
     }
 
-  });
+    let html = "";
 
-  document.getElementById("chatBox").innerHTML = html;
+    messages.forEach((msg) => {
 
-  document.getElementById("chatBox").scrollTop =
-    document.getElementById("chatBox").scrollHeight;
+      if (
+        Date.now() - msg.time >=
+        48 * 60 * 60 * 1000
+      ) {
+        return;
+      }
 
-});
+      const checkMark =
+        msg.seen
+          ? "✓✓ Seen"
+          : "✓ Delivered";
+
+      const cls =
+        msg.sender === currentUser
+          ? "message me"
+          : "message her";
+
+      html += `
+        <div class="message ${cls}">
+
+          <div>
+            ${
+              msg.voiceUrl
+                ? `
+                  <audio controls>
+                    <source src="${msg.voiceUrl}">
+                  </audio>
+                `
+                : (msg.text || "")
+            }
+          </div>
+
+          <small>
+            ${msg.sender}
+            -
+            ${new Date(msg.time).toLocaleTimeString()}
+            <br>
+            ${checkMark}
+          </small>
+
+          <div class="reaction">
+            ${msg.reaction || ""}
+          </div>
+
+          <div class="reactionButtons">
+
+            <button onclick="reactMessage('${msg.id}','❤️')">
+              ❤️
+            </button>
+
+            <button onclick="reactMessage('${msg.id}','😂')">
+              😂
+            </button>
+
+            <button onclick="reactMessage('${msg.id}','🫂')">
+              🫂
+            </button>
+
+            <button onclick="reactMessage('${msg.id}','🥺')">
+              🥺
+            </button>
+
+          </div>
+
+        </div>
+      `;
+    });
+   const chatBox = document.getElementById("chatBox");
+
+const audioIsPlaying = [...chatBox.querySelectorAll("audio")]
+  .some(audio => !audio.paused && !audio.ended);
+
+if (audioIsPlaying) {
+  return;
+}
+
+chatBox.innerHTML = html;
+
+chatBox.scrollTop = chatBox.scrollHeight;
+
+  } catch (error) {
+
+    console.error("Failed to load chat:", error);
+
+  }
+}
+
+// تحميل أول مرة
+loadChat();
+
+// تحديث الشات كل 9 ثواني
+setInterval(loadChat, 9000);
+
 window.reactMessage = async function(messageId, emoji){
 
   await updateDoc(
@@ -482,19 +494,36 @@ window.toggleRecording = async function () {
       );
 
       const result = await response.json();
-      console.log(result);
 
-      await addDoc(
-        collection(db, "chat"),
+      console.log("Voice uploaded:", result);
+
+      if (!result.url) {
+        console.error("No voice URL returned");
+        return;
+      }
+
+      const chatResponse = await fetch(
+        "https://ourheartfunctions2026.azurewebsites.net/api/sendchat",
         {
-          sender: currentUser,
-          voiceUrl: result.url,
-          time: Date.now(),
-          seen: false,
-          reaction: ""
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            sender: currentUser,
+            voiceUrl: result.url
+          })
         }
       );
 
+      const chatResult = await chatResponse.json();
+
+      if (!chatResponse.ok) {
+        console.error("Voice message save error:", chatResult);
+        return;
+      }
+
+      console.log("Voice message saved:", chatResult);
     };
 
     mediaRecorder.start();
@@ -505,9 +534,7 @@ window.toggleRecording = async function () {
       "recordBtn"
     ).innerHTML = "⏹️ إيقاف";
 
-  }
-
-  else {
+  } else {
 
     mediaRecorder.stop();
 
@@ -516,7 +543,6 @@ window.toggleRecording = async function () {
     document.getElementById(
       "recordBtn"
     ).innerHTML = "🎤 تسجيل صوت";
-
   }
 
 };

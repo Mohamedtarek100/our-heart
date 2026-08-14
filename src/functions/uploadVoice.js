@@ -1,5 +1,8 @@
 const { app } = require('@azure/functions');
-const { BlobServiceClient } = require("@azure/storage-blob");
+const {
+  BlobServiceClient,
+  BlobSASPermissions
+} = require("@azure/storage-blob");
 const busboy = require("busboy");
 
 const connectionString = process.env.AZURE_STORAGE_CONNECTION_STRING;
@@ -43,16 +46,21 @@ app.http('uploadVoice', {
 
                     await blockBlobClient.uploadData(fileBuffer);
 
-                    resolve({
-    headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "POST, OPTIONS",
-        "Access-Control-Allow-Headers": "*"
-    },
+                    const sasUrl = await blockBlobClient.generateSasUrl({
+  permissions: BlobSASPermissions.parse("r"),
+  expiresOn: new Date(Date.now() + 60 * 60 * 1000)
+});
 
-    jsonBody: {
-        url: blockBlobClient.url
-    }
+resolve({
+  headers: {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers": "*"
+  },
+
+  jsonBody: {
+    url: sasUrl
+  }
 });
                 }
 

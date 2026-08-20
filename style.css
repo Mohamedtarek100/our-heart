@@ -480,3 +480,28 @@ body {
 	#changeAccountButton { width: min(100%, 250px); justify-content: center; }
 }
 
+/* Immediate Seen-state refresh and stable contextual delete/reaction layering */
+.message.message-seen .messageMeta span:last-child {
+  animation: seenPulse .22s ease-out;
+}
+
+@keyframes seenPulse {
+  0% { opacity: .45; transform: scale(.96); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+.message.context-selected,
+.message.show-reactions {
+  position: relative;
+  z-index: 1000;
+  isolation: isolate;
+}
+
+.message.context-selected .reactionButtons,
+.message.show-reactions .reactionButtons {
+  z-index: 1200;
+}
+
+#messageDeleteMenu {
+  z-index: 3000;
+}

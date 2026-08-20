@@ -52,6 +52,7 @@ const replySwipeStartThresholdPx = 6;
 const replySwipeTriggerDistancePx = 34;
 let pressTimer = null;
 let pressState = null;
+let suppressMessageClickUntil = 0;
 let deleteMenuElement = null;
 let deleteMenuMessageId = null;
 let selectedMessageElement = null;
@@ -401,7 +402,11 @@ function hideDeleteMenu() {
   }
 
   if (selectedMessageElement) {
-    selectedMessageElement.classList.remove("context-selected", "reaction-above");
+    selectedMessageElement.classList.remove(
+      "context-selected",
+      "reaction-above",
+      "show-reactions"
+    );
     selectedMessageElement = null;
   }
 }
@@ -429,7 +434,6 @@ function openDeleteMenu(messageElement) {
     return;
   }
 
-  selectMessageContext(messageElement);
   deleteMenuMessageId = messageElement.dataset.messageId || "";
   positionDeleteMenu(messageElement);
 }
@@ -513,9 +517,12 @@ function handleChatBoxPointerDown(event) {
     if (!pressState || pressState.longPressed) return;
 
     pressState.longPressed = true;
+    suppressMessageClickUntil = Date.now() + 500;
+
     if (pressState.messageElement.dataset.sender !== currentUser) {
       hideDeleteMenu();
     }
+
     selectMessageContext(pressState.messageElement);
     openDeleteMenu(pressState.messageElement);
   }, longPressDelayMs);
@@ -659,6 +666,46 @@ function syncMessageReaction(messageId, emoji) {
   }
 }
 
+function syncMessageSeen(messageId, seen = true) {
+  const normalizedId = normalizeMessageId(messageId);
+  if (!normalizedId) return;
+
+  const messageElement = document.querySelector(
+    `[data-message-id="${CSS.escape(normalizedId)}"]`
+  );
+
+  if (messageElement) {
+    const meta = messageElement.querySelector(".messageMeta");
+    const seenElement = meta?.querySelector("span:last-child");
+
+    if (seenElement) {
+      seenElement.textContent = seen ? "✓✓ Seen" : "✓ Delivered";
+    }
+
+    if (seen) {
+      messageElement.classList.add("message-seen");
+    } else {
+      messageElement.classList.remove("message-seen");
+    }
+  }
+
+  const existing = messageStore.get(normalizedId);
+  if (existing) {
+    messageStore.set(normalizedId, {
+      ...existing,
+      seen: !!seen
+    });
+  }
+
+  if (Array.isArray(window.chatMessages)) {
+    window.chatMessages = window.chatMessages.map((message) =>
+      normalizeMessageId(message.id) === normalizedId
+        ? { ...message, seen: !!seen }
+        : message
+    );
+  }
+}
+
 window.updateOnlineStatus = async function(){
   if (!currentUser) return;
 
@@ -761,6 +808,10 @@ if (chatBox) {
 
     const message = event.target.closest("[data-message-id]");
     if (message && !isInteractiveMessageTarget(event.target)) {
+      if (Date.now() < suppressMessageClickUntil) {
+        return;
+      }
+
       document.querySelectorAll(".message.show-reactions").forEach((item) => {
         if (item !== message) item.classList.remove("show-reactions");
       });
@@ -979,17 +1030,20 @@ async function markVisibleMessagesSeen() {
         : message
     ));
     window.chatMessages.forEach((message) => {
-      if (seenIds.has(normalizeMessageId(message.id))) {
-        messageStore.set(normalizeMessageId(message.id), { ...message, seen: true });
+      const normalizedId = normalizeMessageId(message.id);
+      if (seenIds.has(normalizedId)) {
+        messageStore.set(normalizedId, { ...message, seen: true });
+        syncMessageSeen(normalizedId, true);
       }
     });
-    await loadChat();
   } catch (error) {
     console.error("Azure seen update failed, fallback to Firebase:", error);
 
     await Promise.all(unseenMessages.map(async (message) => {
+      const normalizedId = normalizeMessageId(message.id);
       try {
-        await updateDoc(doc(db, "chat", normalizeMessageId(message.id)), { seen: true });
+        await updateDoc(doc(db, "chat", normalizedId), { seen: true });
+        syncMessageSeen(normalizedId, true);
       } catch (fallbackError) {
         console.error("Firebase seen update failed:", fallbackError);
       }
@@ -1080,6 +1134,7 @@ async function pollNewMessages() {
           window.chatMessages = (window.chatMessages || []).map(item =>
             normalizeMessageId(item.id) === message.id ? message : item
           );
+          syncMessageSeen(message.id, message.seen);
         }
         continue;
       }
@@ -1195,8 +1250,12 @@ async function loadChat() {
         newIncomingMessageIds.add(msg.id);
       }
 
+      const previousMessage = messageStore.get(msg.id);
       knownServerMessageIds.add(msg.id);
       messageStore.set(msg.id, msg);
+      if (previousMessage && previousMessage.seen !== msg.seen) {
+        syncMessageSeen(msg.id, msg.seen);
+      }
       mergedMessages.set(msg.id, msg);
     });
 

@@ -48,6 +48,8 @@ const deletedMessageIds = new Set();
 let markSeenInFlight = false;
 const longPressDelayMs = 700;
 const longPressMoveThresholdPx = 10;
+const replySwipeStartThresholdPx = 6;
+const replySwipeTriggerDistancePx = 34;
 let pressTimer = null;
 let pressState = null;
 let deleteMenuElement = null;
@@ -57,6 +59,7 @@ let swipeState = null;
 let sendInFlight = false;
 let chatHasLoaded = false;
 let newMessagesPending = false;
+const knownServerMessageIds = new Set();
 
 function escapeHtml(value) {
   return String(value || "")
@@ -254,6 +257,7 @@ function renderLocalMessage(message) {
 
   messageStore.set(messageId, message);
   pendingLocalMessages.set(messageId, message);
+  knownServerMessageIds.add(messageId);
   window.chatMessages = (window.chatMessages || []).filter((item) => normalizeMessageId(item.id) !== messageId);
   window.chatMessages.push(message);
 
@@ -461,8 +465,11 @@ function handleChatBoxPointerDown(event) {
   swipeState = {
     messageElement,
     startX: event.clientX,
+    startY: event.clientY,
     pointerId: event.pointerId,
-    distance: 0
+    distance: 0,
+    directionLocked: false,
+    engaged: false
   };
 
   pressTimer = setTimeout(() => {
@@ -475,13 +482,43 @@ function handleChatBoxPointerDown(event) {
 
 function handleChatBoxPointerMove(event) {
   if (swipeState && event.pointerId === swipeState.pointerId) {
-    const distance = Math.max(0, event.clientX - swipeState.startX);
-    if (distance > 8) {
+    const deltaX = event.clientX - swipeState.startX;
+    const deltaY = event.clientY - swipeState.startY;
+    const horizontalDistance = Math.abs(deltaX);
+    const verticalDistance = Math.abs(deltaY);
+
+    if (!swipeState.directionLocked && (horizontalDistance > replySwipeStartThresholdPx || verticalDistance > replySwipeStartThresholdPx)) {
+      if (verticalDistance > horizontalDistance * 1.15) {
+        swipeState.directionLocked = true;
+        swipeState.engaged = false;
+        swipeState.messageElement.classList.remove("is-swiping");
+        swipeState.messageElement.style.removeProperty("--swipe-distance");
+        swipeState = null;
+        clearMessagePressTimer();
+        return;
+      }
+
+      if (horizontalDistance >= verticalDistance) {
+        swipeState.directionLocked = true;
+        try {
+          swipeState.messageElement.setPointerCapture?.(event.pointerId);
+        } catch {}
+      }
+    }
+
+    if (swipeState.directionLocked && deltaX > 0) {
+      const distance = Math.min(deltaX, 72);
       clearMessagePressTimer();
+      swipeState.engaged = true;
       swipeState.distance = Math.min(distance, 76);
       swipeState.messageElement.style.setProperty("--swipe-distance", `${swipeState.distance}px`);
       swipeState.messageElement.classList.add("is-swiping");
-      swipeState.messageElement.querySelector(".replyAction")?.classList.toggle("is-ready", distance >= 52);
+      swipeState.messageElement.querySelector(".replyAction")?.classList.toggle("is-ready", distance >= replySwipeTriggerDistancePx);
+    } else if (swipeState.directionLocked && deltaX <= 0) {
+      swipeState.distance = 0;
+      swipeState.messageElement.style.removeProperty("--swipe-distance");
+      swipeState.messageElement.classList.remove("is-swiping");
+      swipeState.messageElement.querySelector(".replyAction")?.classList.remove("is-ready");
     }
   }
 
@@ -499,7 +536,7 @@ function handleChatBoxPointerMove(event) {
 
 function handleChatBoxPointerEnd(event) {
   if (swipeState && (!event || event.pointerId === swipeState.pointerId)) {
-    if (swipeState.distance >= 52) {
+    if (swipeState.engaged && swipeState.distance >= replySwipeTriggerDistancePx) {
       const message = window.chatMessages?.find((item) => item.id === swipeState.messageElement.dataset.messageId);
       if (message) setReplyTarget(message);
     }
@@ -944,12 +981,6 @@ async function loadChat() {
     const previousScrollTop = chatBox.scrollTop;
     const previousScrollHeight = chatBox.scrollHeight;
     const wasNearBottom = previousScrollHeight - chatBox.clientHeight - previousScrollTop <= 64;
-    const previousRenderedIds = new Set(
-      [...chatBox.querySelectorAll("[data-message-id]")]
-        .map((element) => normalizeMessageId(element.dataset.messageId))
-        .filter(Boolean)
-    );
-
     const response = await fetch(
       "https://ourheartfunctions2026.azurewebsites.net/api/getchat"
     );
@@ -965,6 +996,7 @@ async function loadChat() {
       .map(normalizeMessage)
       .filter(Boolean);
     const mergedMessages = new Map();
+    const newIncomingMessageIds = new Set();
 
     serverMessages.forEach((msg) => {
 
@@ -979,6 +1011,15 @@ async function loadChat() {
         return;
       }
 
+      if (
+        chatHasLoaded &&
+        !knownServerMessageIds.has(msg.id) &&
+        msg.sender !== currentUser
+      ) {
+        newIncomingMessageIds.add(msg.id);
+      }
+
+      knownServerMessageIds.add(msg.id);
       messageStore.set(msg.id, msg);
       mergedMessages.set(msg.id, msg);
     });
@@ -1023,20 +1064,25 @@ async function loadChat() {
   .some(audio => !audio.paused && !audio.ended);
 
 if (audioIsPlaying) {
+  if (wasNearBottom) {
+    clearNewMessagesIndicator();
+  } else if (newIncomingMessageIds.size > 0) {
+    showNewMessagesIndicator();
+  }
+  chatHasLoaded = true;
   return;
 }
 
 chatBox.innerHTML = html;
 
-    const currentIds = new Set([...mergedMessages.keys()]);
-    const hasNewMessages = chatHasLoaded && [...currentIds].some((id) => !previousRenderedIds.has(id));
+    const hasNewIncomingMessages = newIncomingMessageIds.size > 0;
 
     if (wasNearBottom) {
       chatBox.scrollTop = chatBox.scrollHeight;
       clearNewMessagesIndicator();
     } else {
       chatBox.scrollTop = Math.min(previousScrollTop, Math.max(0, chatBox.scrollHeight - chatBox.clientHeight));
-      if (hasNewMessages) showNewMessagesIndicator();
+      if (hasNewIncomingMessages) showNewMessagesIndicator();
     }
 
     chatHasLoaded = true;

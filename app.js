@@ -52,7 +52,6 @@ const replySwipeStartThresholdPx = 6;
 const replySwipeTriggerDistancePx = 34;
 let pressTimer = null;
 let pressState = null;
-let suppressMessageClickUntil = 0;
 let deleteMenuElement = null;
 let deleteMenuMessageId = null;
 let selectedMessageElement = null;
@@ -63,7 +62,9 @@ let chatHasLoaded = false;
 let newMessagesPending = false;
 const knownServerMessageIds = new Set();
 let latestServerMessageTime = 0;
+let latestSeenUpdateTime = 0;
 let fastMessagePollInFlight = false;
+let suppressMessageClickUntil = 0;
 
 function escapeHtml(value) {
   return String(value || "")
@@ -402,11 +403,7 @@ function hideDeleteMenu() {
   }
 
   if (selectedMessageElement) {
-    selectedMessageElement.classList.remove(
-      "context-selected",
-      "reaction-above",
-      "show-reactions"
-    );
+    selectedMessageElement.classList.remove("context-selected", "reaction-above");
     selectedMessageElement = null;
   }
 }
@@ -416,11 +413,23 @@ function positionDeleteMenu(messageElement) {
   const rect = messageElement.getBoundingClientRect();
   const menuWidth = 132;
   const menuHeight = 48;
-  const left = Math.max(8, Math.min(window.innerWidth - menuWidth - 8, rect.right - menuWidth));
-  const top = Math.max(8, Math.min(window.innerHeight - menuHeight - 8, rect.top - menuHeight - 4));
+  const gutter = 8;
+
+  const left = Math.max(
+    gutter,
+    Math.min(window.innerWidth - menuWidth - gutter, rect.right - menuWidth)
+  );
+
+  let top = rect.top - menuHeight - 6;
+  if (top < gutter) {
+    top = Math.min(
+      window.innerHeight - menuHeight - gutter,
+      rect.bottom + 6
+    );
+  }
 
   menu.style.left = `${left}px`;
-  menu.style.top = `${top}px`;
+  menu.style.top = `${Math.max(gutter, top)}px`;
   menu.style.display = "block";
   requestAnimationFrame(() => menu.classList.add("is-open"));
 }
@@ -434,6 +443,9 @@ function openDeleteMenu(messageElement) {
     return;
   }
 
+  if (selectedMessageElement !== messageElement) {
+    selectMessageContext(messageElement);
+  }
   deleteMenuMessageId = messageElement.dataset.messageId || "";
   positionDeleteMenu(messageElement);
 }
@@ -517,12 +529,10 @@ function handleChatBoxPointerDown(event) {
     if (!pressState || pressState.longPressed) return;
 
     pressState.longPressed = true;
-    suppressMessageClickUntil = Date.now() + 500;
-
+    suppressMessageClickUntil = Date.now() + 650;
     if (pressState.messageElement.dataset.sender !== currentUser) {
       hideDeleteMenu();
     }
-
     selectMessageContext(pressState.messageElement);
     openDeleteMenu(pressState.messageElement);
   }, longPressDelayMs);
@@ -592,6 +602,9 @@ function handleChatBoxPointerEnd(event) {
     swipeState.messageElement.classList.remove("is-swiping");
     swipeState.messageElement.querySelector(".replyAction")?.classList.remove("is-ready");
     swipeState = null;
+  }
+  if (pressState?.longPressed) {
+    try { event.preventDefault(); } catch {}
   }
   clearMessagePressTimer();
 }
@@ -663,46 +676,6 @@ function syncMessageReaction(messageId, emoji) {
       ...pendingMessage,
       reaction: emoji
     });
-  }
-}
-
-function syncMessageSeen(messageId, seen = true) {
-  const normalizedId = normalizeMessageId(messageId);
-  if (!normalizedId) return;
-
-  const messageElement = document.querySelector(
-    `[data-message-id="${CSS.escape(normalizedId)}"]`
-  );
-
-  if (messageElement) {
-    const meta = messageElement.querySelector(".messageMeta");
-    const seenElement = meta?.querySelector("span:last-child");
-
-    if (seenElement) {
-      seenElement.textContent = seen ? "✓✓ Seen" : "✓ Delivered";
-    }
-
-    if (seen) {
-      messageElement.classList.add("message-seen");
-    } else {
-      messageElement.classList.remove("message-seen");
-    }
-  }
-
-  const existing = messageStore.get(normalizedId);
-  if (existing) {
-    messageStore.set(normalizedId, {
-      ...existing,
-      seen: !!seen
-    });
-  }
-
-  if (Array.isArray(window.chatMessages)) {
-    window.chatMessages = window.chatMessages.map((message) =>
-      normalizeMessageId(message.id) === normalizedId
-        ? { ...message, seen: !!seen }
-        : message
-    );
   }
 }
 
@@ -795,6 +768,11 @@ if (chatBox) {
   chatBox.addEventListener("pointercancel", handleChatBoxPointerEnd);
   chatBox.addEventListener("pointerleave", handleChatBoxPointerEnd);
   chatBox.addEventListener("click", (event) => {
+    if (Date.now() < suppressMessageClickUntil) {
+      suppressMessageClickUntil = 0;
+      return;
+    }
+
     const quote = event.target.closest(".replyQuote");
     if (quote) scrollToOriginal(quote.dataset.replyTarget, quote);
 
@@ -808,10 +786,6 @@ if (chatBox) {
 
     const message = event.target.closest("[data-message-id]");
     if (message && !isInteractiveMessageTarget(event.target)) {
-      if (Date.now() < suppressMessageClickUntil) {
-        return;
-      }
-
       document.querySelectorAll(".message.show-reactions").forEach((item) => {
         if (item !== message) item.classList.remove("show-reactions");
       });
@@ -1030,20 +1004,26 @@ async function markVisibleMessagesSeen() {
         : message
     ));
     window.chatMessages.forEach((message) => {
-      const normalizedId = normalizeMessageId(message.id);
-      if (seenIds.has(normalizedId)) {
-        messageStore.set(normalizedId, { ...message, seen: true });
-        syncMessageSeen(normalizedId, true);
+      if (seenIds.has(normalizeMessageId(message.id))) {
+        const updatedMessage = { ...message, seen: true, seenAt: Date.now() };
+        messageStore.set(normalizeMessageId(message.id), updatedMessage);
+        const messageElement = document.querySelector(
+          `[data-message-id="${CSS.escape(normalizeMessageId(message.id))}"]`
+        );
+        const seenElement = messageElement?.querySelector(".messageMeta span:last-child");
+        if (seenElement) {
+          seenElement.textContent = "✓✓ Seen";
+          seenElement.classList.add("seen-transition");
+          window.setTimeout(() => seenElement.classList.remove("seen-transition"), 260);
+        }
       }
     });
   } catch (error) {
     console.error("Azure seen update failed, fallback to Firebase:", error);
 
     await Promise.all(unseenMessages.map(async (message) => {
-      const normalizedId = normalizeMessageId(message.id);
       try {
-        await updateDoc(doc(db, "chat", normalizedId), { seen: true });
-        syncMessageSeen(normalizedId, true);
+        await updateDoc(doc(db, "chat", normalizeMessageId(message.id)), { seen: true });
       } catch (fallbackError) {
         console.error("Firebase seen update failed:", fallbackError);
       }
@@ -1101,8 +1081,14 @@ async function pollNewMessages() {
   fastMessagePollInFlight = true;
 
   try {
+    const params = new URLSearchParams({
+      after: String(latestServerMessageTime),
+      seenAfter: String(latestSeenUpdateTime),
+      user: currentUser
+    });
+
     const response = await fetch(
-      `${azureBaseUrl}/getNewMessages?after=${encodeURIComponent(latestServerMessageTime)}`,
+      `${azureBaseUrl}/getNewMessages?${params.toString()}`,
       { cache: "no-store" }
     );
 
@@ -1122,6 +1108,10 @@ async function pollNewMessages() {
         latestServerMessageTime,
         Number(message.time) || 0
       );
+      latestSeenUpdateTime = Math.max(
+        latestSeenUpdateTime,
+        Number(message.seenAt) || 0
+      );
 
       if (deletedMessageIds.has(message.id)) continue;
 
@@ -1129,12 +1119,21 @@ async function pollNewMessages() {
 
       if (knownServerMessageIds.has(message.id)) {
         const existing = messageStore.get(message.id);
-        if (existing && existing.seen !== message.seen) {
+        if (existing && (existing.seen !== message.seen || (Number(existing.seenAt) || 0) !== (Number(message.seenAt) || 0))) {
           messageStore.set(message.id, message);
           window.chatMessages = (window.chatMessages || []).map(item =>
             normalizeMessageId(item.id) === message.id ? message : item
           );
-          syncMessageSeen(message.id, message.seen);
+
+          const messageElement = chatBox.querySelector(
+            `[data-message-id="${CSS.escape(message.id)}"]`
+          );
+          const seenElement = messageElement?.querySelector(".messageMeta span:last-child");
+          if (seenElement && message.seen) {
+            seenElement.textContent = "✓✓ Seen";
+            seenElement.classList.add("seen-transition");
+            window.setTimeout(() => seenElement.classList.remove("seen-transition"), 260);
+          }
         }
         continue;
       }
@@ -1224,6 +1223,13 @@ async function loadChat() {
         latestServerMessageTime,
         ...serverMessages.map(message => Number(message.time) || 0)
       );
+      const serverSeenTimes = serverMessages
+        .map(message => Number(message.seenAt) || 0)
+        .filter(Boolean);
+      latestSeenUpdateTime = Math.max(
+        latestSeenUpdateTime,
+        ...(serverSeenTimes.length ? serverSeenTimes : [Date.now()])
+      );
     }
 
     const mergedMessages = new Map();
@@ -1250,12 +1256,8 @@ async function loadChat() {
         newIncomingMessageIds.add(msg.id);
       }
 
-      const previousMessage = messageStore.get(msg.id);
       knownServerMessageIds.add(msg.id);
       messageStore.set(msg.id, msg);
-      if (previousMessage && previousMessage.seen !== msg.seen) {
-        syncMessageSeen(msg.id, msg.seen);
-      }
       mergedMessages.set(msg.id, msg);
     });
 
@@ -1337,7 +1339,7 @@ loadChat();
 setInterval(loadChat, 5000);
 
 // مزامنة خفيفة للرسائل الجديدة فقط كل 1.5 ثانية
-setInterval(pollNewMessages, 1500);
+setInterval(pollNewMessages, 900);
 
 window.reactMessage = async function(messageId, emoji){
 

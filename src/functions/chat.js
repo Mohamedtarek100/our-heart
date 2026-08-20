@@ -52,15 +52,16 @@ app.http("getChat", {
 });
 
 
-// GET: الرسائل الجديدة فقط بعد وقت محدد (مسار خفيف للمزامنة السريعة)
+// GET: new messages + fast seen/read-receipt updates
 app.http("getNewMessages", {
   methods: ["GET"],
   authLevel: "anonymous",
 
   handler: async (request, context) => {
     try {
-      const afterParam = request.query.get("after");
-      const after = Number(afterParam);
+      const after = Number(request.query.get("after"));
+      const seenAfter = Number(request.query.get("seenAfter") || 0);
+      const user = String(request.query.get("user") || "").trim();
 
       if (!Number.isFinite(after)) {
         return {
@@ -72,21 +73,37 @@ app.http("getNewMessages", {
         };
       }
 
-      const querySpec = {
-        query: `
+      const hasSeenCursor = Number.isFinite(seenAfter) && seenAfter > 0 && !!user;
+
+      const query = hasSeenCursor
+        ? `
+          SELECT TOP 100 *
+          FROM c
+          WHERE c.type = "chat"
+            AND (
+              c.time > @after
+              OR (c.sender = @user AND IS_DEFINED(c.seenAt) AND c.seenAt > @seenAfter)
+            )
+          ORDER BY c.time ASC
+        `
+        : `
           SELECT TOP 50 *
           FROM c
           WHERE c.type = "chat"
-            AND c.time >= @after
+            AND c.time > @after
           ORDER BY c.time ASC
-        `,
-        parameters: [
-          { name: "@after", value: after }
-        ]
-      };
+        `;
+
+      const parameters = hasSeenCursor
+        ? [
+            { name: "@after", value: after },
+            { name: "@user", value: user },
+            { name: "@seenAfter", value: seenAfter }
+          ]
+        : [{ name: "@after", value: after }];
 
       const { resources } = await container.items
-        .query(querySpec)
+        .query({ query, parameters })
         .fetchAll();
 
       return {

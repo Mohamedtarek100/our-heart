@@ -29,19 +29,91 @@ const azureBaseUrl = "https://ourheartfunctions2026.azurewebsites.net/api";
 let mediaRecorder;
 let audioChunks = [];
 let isRecording = false;
+let recordingPointerId = null;
+let recordingStartX = 0;
+let recordingStarting = false;
+let recordingStopRequested = false;
+let recordingStopHandled = false;
+let recordingStartTime = 0;
+let recordingTimer = null;
+let recordingCancelled = false;
+let recordingSwipeDistance = 0;
+let activeRecordingSession = null;
 let typingStopTimer = null;
 let typingStateSent = false;
 const useAzurePresence = true;
 const pendingLocalMessages = new Map();
+const messageStore = new Map();
 const deletedMessageIds = new Set();
+let markSeenInFlight = false;
 const longPressDelayMs = 700;
 const longPressMoveThresholdPx = 10;
 let pressTimer = null;
 let pressState = null;
 let deleteMenuElement = null;
 let deleteMenuMessageId = null;
+let replyTarget = null;
+let swipeState = null;
+let sendInFlight = false;
+let chatHasLoaded = false;
+let newMessagesPending = false;
+
+function escapeHtml(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function normalizeMessageId(value) {
+  return value === undefined || value === null ? "" : String(value).trim();
+}
+
+function normalizeMessage(message) {
+  if (!message) return null;
+
+  const id = normalizeMessageId(message.id);
+  if (!id) return null;
+
+  return {
+    ...message,
+    id,
+    replyToMessageId: message.replyToMessageId
+      ? normalizeMessageId(message.replyToMessageId)
+      : ""
+  };
+}
+
+function getReplyPreviewText(message) {
+  if (message.replyToType === "voice" || message.replyToVoice || message.replyToVoiceUrl) {
+    return "🎤 Voice message";
+  }
+
+  return message.replyToText ? `"${message.replyToText}"` : "Original message";
+}
+
+function buildReplyQuoteHtml(msg) {
+  const replyId = normalizeMessageId(msg.replyToMessageId);
+  if (!replyId) return "";
+
+  return `
+    <button class="replyQuote" type="button" data-reply-target="${escapeHtml(replyId)}" aria-label="Reply to ${escapeHtml(msg.replyToSender || "original message")}">
+      <span class="replyQuoteBar" aria-hidden="true"></span>
+      <span class="replyQuoteContent">
+        <strong>${escapeHtml(msg.replyToSender || "Unknown")}</strong>
+        <span>${escapeHtml(getReplyPreviewText(msg))}</span>
+      </span>
+      <span class="replyQuoteDeleted" hidden>Original message deleted</span>
+    </button>
+  `;
+}
 
 function buildMessageHtml(msg) {
+  msg = normalizeMessage(msg);
+  if (!msg) return "";
+
   const checkMark =
     msg.seen
       ? "✓✓ Seen"
@@ -53,26 +125,28 @@ function buildMessageHtml(msg) {
       : "message her";
 
   return `
-    <div class="message ${cls}" data-message-id="${msg.id}" data-sender="${msg.sender}">
+    <div class="message ${cls}" data-message-id="${escapeHtml(msg.id)}" data-sender="${escapeHtml(msg.sender)}">
 
-      <div>
+      <button class="replyAction" type="button" aria-label="Reply to this message" onclick="startReply('${escapeHtml(msg.id)}')">↩</button>
+
+      ${buildReplyQuoteHtml(msg)}
+
+      <div class="messageContent">
         ${
           msg.voiceUrl
             ? `
               <audio controls>
-                <source src="${msg.voiceUrl}">
+                <source src="${escapeHtml(msg.voiceUrl)}">
               </audio>
             `
-            : (msg.text || "")
+            : escapeHtml(msg.text)
         }
       </div>
 
-      <small>
-        ${msg.sender}
-        -
-        ${new Date(msg.time).toLocaleTimeString()}
-        <br>
-        ${checkMark}
+      <small class="messageMeta">
+        <span>${escapeHtml(msg.sender)}</span>
+        <span>${new Date(msg.time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+        <span>${checkMark}</span>
       </small>
 
       <div class="reaction">
@@ -103,47 +177,151 @@ function buildMessageHtml(msg) {
   `;
 }
 
-function renderLocalMessage(message) {
+function setReplyTarget(message) {
   if (!message || !message.id) return;
 
-  if (deletedMessageIds.has(message.id)) return;
+  replyTarget = {
+    id: message.id,
+    sender: message.sender || "Unknown",
+    text: message.text || "",
+    type: message.voiceUrl ? "voice" : "text",
+    voice: !!message.voiceUrl
+  };
 
-  pendingLocalMessages.set(message.id, message);
+  const preview = document.getElementById("replyPreview");
+  if (!preview) return;
+
+  preview.hidden = false;
+  preview.querySelector(".replyPreviewSender").textContent = replyTarget.sender;
+  preview.querySelector(".replyPreviewText").textContent = replyTarget.voice
+    ? "🎤 Voice message"
+    : replyTarget.text || "Original message";
+  document.getElementById("messageInput")?.focus();
+}
+
+window.startReply = function (messageId) {
+  const message = pendingLocalMessages.get(messageId) || window.chatMessages?.find((item) => item.id === messageId);
+  const element = document.querySelector(`[data-message-id="${messageId}"]`);
+
+  if (message) {
+    setReplyTarget(message);
+  } else if (element) {
+    const isVoiceMessage = !!element.querySelector("audio");
+    setReplyTarget({
+      id: messageId,
+      sender: element.dataset.sender,
+      text: element.querySelector(".messageContent")?.textContent.trim() || "",
+      voiceUrl: isVoiceMessage ? "pending" : ""
+    });
+  }
+};
+
+window.cancelReply = function () {
+  replyTarget = null;
+  const preview = document.getElementById("replyPreview");
+  if (preview) {
+    preview.hidden = true;
+    preview.querySelector(".replyPreviewSender").textContent = "";
+    preview.querySelector(".replyPreviewText").textContent = "";
+  }
+};
+
+function scrollToOriginal(messageId, quoteElement) {
+  const normalizedId = normalizeMessageId(messageId);
+  const original = document.querySelector(`[data-message-id="${CSS.escape(normalizedId)}"]`);
+  if (original) {
+    original.scrollIntoView({ behavior: "smooth", block: "center" });
+    original.classList.add("message-highlight");
+    setTimeout(() => original.classList.remove("message-highlight"), 1200);
+    return;
+  }
+
+  const deletedState = quoteElement.querySelector(".replyQuoteDeleted");
+  const content = quoteElement.querySelector(".replyQuoteContent");
+  if (deletedState && content) {
+    content.hidden = true;
+    deletedState.hidden = false;
+  }
+}
+
+function renderLocalMessage(message) {
+  message = normalizeMessage(message);
+  if (!message) return;
+
+  const messageId = message.id;
+
+  if (deletedMessageIds.has(messageId)) return;
+
+  messageStore.set(messageId, message);
+  pendingLocalMessages.set(messageId, message);
+  window.chatMessages = (window.chatMessages || []).filter((item) => normalizeMessageId(item.id) !== messageId);
+  window.chatMessages.push(message);
 
   const chatBox = document.getElementById("chatBox");
 
   if (!chatBox) return;
 
-  const existingMessage = chatBox.querySelector(
-    `[data-message-id="${message.id}"]`
+  const existingMessages = chatBox.querySelectorAll(
+    `[data-message-id="${CSS.escape(messageId)}"]`
   );
 
-  if (!existingMessage) {
-    chatBox.insertAdjacentHTML("beforeend", buildMessageHtml(message));
-  }
+  existingMessages.forEach((element) => element.remove());
+  chatBox.insertAdjacentHTML("beforeend", buildMessageHtml(message));
 
   chatBox.scrollTop = chatBox.scrollHeight;
 }
 
 function removeMessageLocally(messageId) {
+  messageId = normalizeMessageId(messageId);
   if (!messageId) return;
 
+  const chatBox = document.getElementById("chatBox");
+  const previousScrollTop = chatBox?.scrollTop || 0;
+  const previousScrollHeight = chatBox?.scrollHeight || 0;
+  const wasNearBottom = chatBox
+    ? previousScrollHeight - chatBox.clientHeight - previousScrollTop <= 64
+    : true;
+
   deletedMessageIds.add(messageId);
+  messageStore.delete(messageId);
   pendingLocalMessages.delete(messageId);
 
-  const messageElement = document.querySelector(
-    `[data-message-id="${messageId}"]`
-  );
-
-  if (messageElement) {
-    messageElement.remove();
-  }
-
-  const chatBox = document.getElementById("chatBox");
+  document.querySelectorAll(
+    `[data-message-id="${CSS.escape(messageId)}"]`
+  ).forEach((messageElement) => messageElement.remove());
 
   if (chatBox) {
-    chatBox.scrollTop = chatBox.scrollHeight;
+    if (wasNearBottom) {
+      chatBox.scrollTop = chatBox.scrollHeight;
+    } else {
+      chatBox.scrollTop = Math.min(
+        previousScrollTop,
+        Math.max(0, chatBox.scrollHeight - chatBox.clientHeight)
+      );
+    }
   }
+}
+
+function showNewMessagesIndicator() {
+  const indicator = document.getElementById("newMessagesIndicator");
+  if (!indicator) return;
+
+  newMessagesPending = true;
+  indicator.hidden = false;
+}
+
+function clearNewMessagesIndicator() {
+  const indicator = document.getElementById("newMessagesIndicator");
+  newMessagesPending = false;
+  if (indicator) indicator.hidden = true;
+}
+
+function scrollChatToLatest() {
+  const chatBox = document.getElementById("chatBox");
+  if (!chatBox) return;
+
+  chatBox.scrollTo({ top: chatBox.scrollHeight, behavior: "smooth" });
+  clearNewMessagesIndicator();
 }
 
 function ensureDeleteMenu() {
@@ -151,30 +329,17 @@ function ensureDeleteMenu() {
 
   deleteMenuElement = document.createElement("div");
   deleteMenuElement.id = "messageDeleteMenu";
-  deleteMenuElement.style.position = "fixed";
-  deleteMenuElement.style.zIndex = "3000";
-  deleteMenuElement.style.display = "none";
-  deleteMenuElement.style.padding = "6px";
-  deleteMenuElement.style.borderRadius = "12px";
-  deleteMenuElement.style.background = "rgba(15, 23, 42, 0.98)";
-  deleteMenuElement.style.border = "1px solid rgba(255, 255, 255, 0.12)";
-  deleteMenuElement.style.boxShadow = "0 10px 30px rgba(0, 0, 0, 0.35)";
+  deleteMenuElement.className = "messageDeleteMenu";
 
   deleteMenuElement.innerHTML = `
     <button
       id="messageDeleteMenuButton"
-      style="
-        width: 100%;
-        padding: 10px 14px;
-        border: none;
-        border-radius: 10px;
-        background: #ef4444;
-        color: white;
-        font-size: 14px;
-        cursor: pointer;
-      "
+      class="messageDeleteMenuButton"
+      type="button"
+      aria-label="Delete message"
     >
-      Delete
+      <span class="deleteIcon" aria-hidden="true">🗑</span>
+      <span>Delete</span>
     </button>
   `;
 
@@ -220,21 +385,27 @@ function hideDeleteMenu() {
   deleteMenuMessageId = null;
 
   if (deleteMenuElement) {
-    deleteMenuElement.style.display = "none";
+    deleteMenuElement.classList.remove("is-open");
+    window.setTimeout(() => {
+      if (deleteMenuElement && !deleteMenuElement.classList.contains("is-open")) {
+        deleteMenuElement.style.display = "none";
+      }
+    }, 140);
   }
 }
 
 function positionDeleteMenu(messageElement) {
   const menu = ensureDeleteMenu();
   const rect = messageElement.getBoundingClientRect();
-  const menuWidth = 120;
-  const menuHeight = 44;
+  const menuWidth = 132;
+  const menuHeight = 48;
   const left = Math.max(8, Math.min(window.innerWidth - menuWidth - 8, rect.right - menuWidth));
   const top = Math.max(8, Math.min(window.innerHeight - menuHeight - 8, rect.top - menuHeight - 4));
 
   menu.style.left = `${left}px`;
   menu.style.top = `${top}px`;
   menu.style.display = "block";
+  requestAnimationFrame(() => menu.classList.add("is-open"));
 }
 
 function openDeleteMenu(messageElement) {
@@ -276,12 +447,6 @@ function handleChatBoxPointerDown(event) {
     return;
   }
 
-  const sender = messageElement.dataset.sender || "";
-
-  if (sender !== currentUser) {
-    return;
-  }
-
   clearMessagePressTimer();
 
   pressState = {
@@ -289,7 +454,15 @@ function handleChatBoxPointerDown(event) {
     startX: event.clientX,
     startY: event.clientY,
     pointerId: event.pointerId,
-    longPressed: false
+    longPressed: false,
+    messageElement
+  };
+
+  swipeState = {
+    messageElement,
+    startX: event.clientX,
+    pointerId: event.pointerId,
+    distance: 0
   };
 
   pressTimer = setTimeout(() => {
@@ -301,6 +474,17 @@ function handleChatBoxPointerDown(event) {
 }
 
 function handleChatBoxPointerMove(event) {
+  if (swipeState && event.pointerId === swipeState.pointerId) {
+    const distance = Math.max(0, event.clientX - swipeState.startX);
+    if (distance > 8) {
+      clearMessagePressTimer();
+      swipeState.distance = Math.min(distance, 76);
+      swipeState.messageElement.style.setProperty("--swipe-distance", `${swipeState.distance}px`);
+      swipeState.messageElement.classList.add("is-swiping");
+      swipeState.messageElement.querySelector(".replyAction")?.classList.toggle("is-ready", distance >= 52);
+    }
+  }
+
   if (!pressState || event.pointerId !== pressState.pointerId || pressState.longPressed) {
     return;
   }
@@ -313,7 +497,17 @@ function handleChatBoxPointerMove(event) {
   }
 }
 
-function handleChatBoxPointerEnd() {
+function handleChatBoxPointerEnd(event) {
+  if (swipeState && (!event || event.pointerId === swipeState.pointerId)) {
+    if (swipeState.distance >= 52) {
+      const message = window.chatMessages?.find((item) => item.id === swipeState.messageElement.dataset.messageId);
+      if (message) setReplyTarget(message);
+    }
+    swipeState.messageElement.style.removeProperty("--swipe-distance");
+    swipeState.messageElement.classList.remove("is-swiping");
+    swipeState.messageElement.querySelector(".replyAction")?.classList.remove("is-ready");
+    swipeState = null;
+  }
   clearMessagePressTimer();
 }
 
@@ -475,7 +669,18 @@ if (chatBox) {
   chatBox.addEventListener("pointerup", handleChatBoxPointerEnd);
   chatBox.addEventListener("pointercancel", handleChatBoxPointerEnd);
   chatBox.addEventListener("pointerleave", handleChatBoxPointerEnd);
+  chatBox.addEventListener("click", (event) => {
+    const quote = event.target.closest(".replyQuote");
+    if (quote) scrollToOriginal(quote.dataset.replyTarget, quote);
+  });
+  chatBox.addEventListener("scroll", () => {
+    if (chatBox.scrollHeight - chatBox.clientHeight - chatBox.scrollTop <= 64) {
+      clearNewMessagesIndicator();
+    }
+  }, { passive: true });
 }
+
+document.getElementById("newMessagesIndicator")?.addEventListener("click", scrollChatToLatest);
 
 document.addEventListener("pointerdown", (event) => {
   if (!deleteMenuElement || deleteMenuElement.style.display === "none") return;
@@ -584,8 +789,18 @@ window.sendMessage = async function () {
   const input = document.getElementById("messageInput");
 
   const text = input.value.trim();
+  const replyMetadata = replyTarget ? {
+    replyToMessageId: normalizeMessageId(replyTarget.id),
+    replyToSender: replyTarget.sender,
+    replyToText: replyTarget.text,
+    replyToType: replyTarget.type,
+    replyToVoice: replyTarget.voice
+  } : {};
 
   if (text === "") return;
+  if (sendInFlight) return;
+
+  sendInFlight = true;
 
   try {
 
@@ -598,7 +813,8 @@ window.sendMessage = async function () {
         },
         body: JSON.stringify({
           sender: currentUser,
-          text: text
+          text: text,
+          ...replyMetadata
         })
       }
     );
@@ -611,9 +827,10 @@ window.sendMessage = async function () {
     }
 
     input.value = "";
+    cancelReply();
 
     if (result.message) {
-      renderLocalMessage(result.message);
+      renderLocalMessage({ ...result.message, ...replyMetadata });
     }
 
     console.log("Message sent:", result);
@@ -622,9 +839,61 @@ window.sendMessage = async function () {
 
     console.error("Failed to send message:", error);
 
+  } finally {
+    sendInFlight = false;
   }
 
 };
+
+async function markVisibleMessagesSeen() {
+  if (!currentUser || markSeenInFlight || !window.chatMessages?.length) return;
+
+  const unseenMessages = window.chatMessages.filter(
+    (message) => message.sender !== currentUser && !message.seen
+  );
+
+  if (!unseenMessages.length) return;
+
+  markSeenInFlight = true;
+
+  try {
+    const response = await fetch(`${azureBaseUrl}/markSeen`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user: currentUser })
+    });
+    const result = await response.json();
+
+    if (!response.ok) {
+      throw new Error(result.error || "Mark messages seen failed");
+    }
+
+    const seenIds = new Set((result.messageIds || []).map(normalizeMessageId));
+    window.chatMessages = window.chatMessages.map((message) => (
+      seenIds.has(normalizeMessageId(message.id))
+        ? { ...message, seen: true }
+        : message
+    ));
+    window.chatMessages.forEach((message) => {
+      if (seenIds.has(normalizeMessageId(message.id))) {
+        messageStore.set(normalizeMessageId(message.id), { ...message, seen: true });
+      }
+    });
+    await loadChat();
+  } catch (error) {
+    console.error("Azure seen update failed, fallback to Firebase:", error);
+
+    await Promise.all(unseenMessages.map(async (message) => {
+      try {
+        await updateDoc(doc(db, "chat", normalizeMessageId(message.id)), { seen: true });
+      } catch (fallbackError) {
+        console.error("Firebase seen update failed:", fallbackError);
+      }
+    }));
+  } finally {
+    markSeenInFlight = false;
+  }
+}
 
 
 // حالة محمد
@@ -669,6 +938,18 @@ if (!useAzurePresence) {
 async function loadChat() {
   try {
 
+    const chatBox = document.getElementById("chatBox");
+    if (!chatBox) return;
+
+    const previousScrollTop = chatBox.scrollTop;
+    const previousScrollHeight = chatBox.scrollHeight;
+    const wasNearBottom = previousScrollHeight - chatBox.clientHeight - previousScrollTop <= 64;
+    const previousRenderedIds = new Set(
+      [...chatBox.querySelectorAll("[data-message-id]")]
+        .map((element) => normalizeMessageId(element.dataset.messageId))
+        .filter(Boolean)
+    );
+
     const response = await fetch(
       "https://ourheartfunctions2026.azurewebsites.net/api/getchat"
     );
@@ -680,10 +961,12 @@ async function loadChat() {
       return;
     }
 
-    let html = "";
-  const serverMessageIds = new Set();
+    const serverMessages = messages
+      .map(normalizeMessage)
+      .filter(Boolean);
+    const mergedMessages = new Map();
 
-    messages.forEach((msg) => {
+    serverMessages.forEach((msg) => {
 
       if (deletedMessageIds.has(msg.id)) {
         return;
@@ -696,27 +979,26 @@ async function loadChat() {
         return;
       }
 
-      const checkMark =
-        msg.seen
-          ? "✓✓ Seen"
-          : "✓ Delivered";
-
-      const cls =
-        msg.sender === currentUser
-          ? "message me"
-          : "message her";
-
-      serverMessageIds.add(msg.id);
-      html += buildMessageHtml(msg);
+      messageStore.set(msg.id, msg);
+      mergedMessages.set(msg.id, msg);
     });
 
-    for (const [messageId, message] of pendingLocalMessages) {
-      if (serverMessageIds.has(messageId)) {
+    for (const [messageId, pendingMessage] of pendingLocalMessages) {
+      const normalizedId = normalizeMessageId(messageId);
+      const message = normalizeMessage(pendingMessage);
+
+      if (!message || deletedMessageIds.has(normalizedId)) {
         pendingLocalMessages.delete(messageId);
         continue;
       }
 
-      if (deletedMessageIds.has(messageId)) {
+      if (mergedMessages.has(normalizedId)) {
+        messageStore.set(normalizedId, mergedMessages.get(normalizedId));
+        pendingLocalMessages.delete(messageId);
+        continue;
+      }
+
+      if (deletedMessageIds.has(normalizedId)) {
         pendingLocalMessages.delete(messageId);
         continue;
       }
@@ -726,12 +1008,18 @@ async function loadChat() {
         continue;
       }
 
-      html += buildMessageHtml(message);
+      mergedMessages.set(normalizedId, message);
+      messageStore.set(normalizedId, message);
     }
 
-   const chatBox = document.getElementById("chatBox");
+    const html = [...mergedMessages.values()]
+      .sort((first, second) => Number(first.time) - Number(second.time))
+      .map(buildMessageHtml)
+      .join("");
 
-const audioIsPlaying = [...chatBox.querySelectorAll("audio")]
+    window.chatMessages = [...mergedMessages.values()];
+
+    const audioIsPlaying = [...chatBox.querySelectorAll("audio")]
   .some(audio => !audio.paused && !audio.ended);
 
 if (audioIsPlaying) {
@@ -740,7 +1028,19 @@ if (audioIsPlaying) {
 
 chatBox.innerHTML = html;
 
-chatBox.scrollTop = chatBox.scrollHeight;
+    const currentIds = new Set([...mergedMessages.keys()]);
+    const hasNewMessages = chatHasLoaded && [...currentIds].some((id) => !previousRenderedIds.has(id));
+
+    if (wasNearBottom) {
+      chatBox.scrollTop = chatBox.scrollHeight;
+      clearNewMessagesIndicator();
+    } else {
+      chatBox.scrollTop = Math.min(previousScrollTop, Math.max(0, chatBox.scrollHeight - chatBox.clientHeight));
+      if (hasNewMessages) showNewMessagesIndicator();
+    }
+
+    chatHasLoaded = true;
+  markVisibleMessagesSeen();
 
   } catch (error) {
 
@@ -1016,50 +1316,115 @@ lastSeen:Date.now()
 }
 
 );
-window.toggleRecording = async function () {
+function updateRecordingUi() {
+  const button = document.getElementById("recordBtn");
+  const timer = document.getElementById("recordingTimer");
+  const hint = document.getElementById("recordingCancelHint");
+  if (!button || !timer || !hint) return;
 
-  if (!isRecording) {
+  button.classList.toggle("is-recording", isRecording);
+  button.classList.toggle("is-canceling", recordingSwipeDistance >= 70);
+  timer.hidden = !isRecording;
+  hint.hidden = !isRecording;
+  hint.textContent = recordingSwipeDistance >= 70
+    ? "Release to cancel"
+    : "Slide left to cancel";
+}
 
-    const stream = await navigator.mediaDevices.getUserMedia({
-      audio: true
-    });
+function updateRecordingTimer() {
+  const timer = document.getElementById("recordingTimer");
+  if (!timer || !isRecording) return;
 
-    mediaRecorder = new MediaRecorder(stream);
+  const elapsedSeconds = Math.floor((Date.now() - recordingStartTime) / 1000);
+  timer.textContent = `${Math.floor(elapsedSeconds / 60)}:${String(elapsedSeconds % 60).padStart(2, "0")}`;
+}
 
-    audioChunks = [];
+async function startVoiceRecording(event) {
+  if (isRecording || recordingStarting || (event.pointerType === "mouse" && event.button !== 0)) return;
 
-    mediaRecorder.ondataavailable = (event) => {
-      audioChunks.push(event.data);
-    };
+  event.preventDefault();
+  recordingPointerId = event.pointerId;
+  recordingStartX = event.clientX;
+  recordingStarting = true;
+  recordingStopRequested = false;
+  recordingStopHandled = false;
+  recordingStartTime = Date.now();
+  recordingCancelled = false;
+  recordingSwipeDistance = 0;
+  const session = {
+    id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    stopRequested: false,
+    finalized: false,
+    saveStarted: false,
+    recorder: null
+  };
+  activeRecordingSession = session;
+  const voiceReplyMetadata = replyTarget ? {
+    replyToMessageId: normalizeMessageId(replyTarget.id),
+    replyToSender: replyTarget.sender,
+    replyToText: replyTarget.text,
+    replyToType: replyTarget.type,
+    replyToVoice: replyTarget.voice
+  } : {};
 
-    mediaRecorder.onstop = async () => {
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch (error) {
+    recordingStarting = false;
+    recordingPointerId = null;
+    console.error("Voice recording could not start:", error);
+    return;
+  }
+  if (recordingStopRequested) {
+    stream.getTracks().forEach((track) => track.stop());
+    if (activeRecordingSession === session) activeRecordingSession = null;
+    recordingStarting = false;
+    recordingPointerId = null;
+    return;
+  }
 
-      const audioBlob = new Blob(audioChunks, {
-        type: "audio/webm"
-      });
+  mediaRecorder = new MediaRecorder(stream);
+  session.recorder = mediaRecorder;
+  audioChunks = [];
 
-      const formData = new FormData();
+  mediaRecorder.ondataavailable = (dataEvent) => {
+    audioChunks.push(dataEvent.data);
+  };
 
-      formData.append(
-        "file",
-        audioBlob,
-        "voice.webm"
-      );
+  mediaRecorder.onstop = async () => {
+    if (session.finalized || session.saveStarted) return;
+    session.finalized = true;
+    recordingStopHandled = true;
 
+    stream.getTracks().forEach((track) => track.stop());
+    clearInterval(recordingTimer);
+    recordingTimer = null;
+    isRecording = false;
+    updateRecordingUi();
+
+    if (recordingCancelled) {
+      audioChunks = [];
+      if (activeRecordingSession === session) activeRecordingSession = null;
+      return;
+    }
+
+    session.saveStarted = true;
+
+    const audioBlob = new Blob(audioChunks, { type: "audio/webm" });
+    const formData = new FormData();
+    formData.append("file", audioBlob, "voice.webm");
+
+    try {
       const response = await fetch(
         "https://ourheartfunctions2026.azurewebsites.net/api/uploadVoice",
-        {
-          method: "POST",
-          body: formData
-        }
+        { method: "POST", body: formData }
       );
-
       const result = await response.json();
-
-      console.log("Voice uploaded:", result);
 
       if (!result.url) {
         console.error("No voice URL returned");
+        if (activeRecordingSession === session) activeRecordingSession = null;
         return;
       }
 
@@ -1067,47 +1432,98 @@ window.toggleRecording = async function () {
         "https://ourheartfunctions2026.azurewebsites.net/api/sendchat",
         {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json"
-          },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             sender: currentUser,
-            voiceUrl: result.url
+            voiceUrl: result.url,
+            ...voiceReplyMetadata
           })
         }
       );
-
       const chatResult = await chatResponse.json();
 
       if (!chatResponse.ok) {
         console.error("Voice message save error:", chatResult);
+        if (activeRecordingSession === session) activeRecordingSession = null;
         return;
       }
 
       if (chatResult.message) {
-        renderLocalMessage(chatResult.message);
+        renderLocalMessage({ ...chatResult.message, ...voiceReplyMetadata });
       }
+      cancelReply();
+      if (activeRecordingSession === session) activeRecordingSession = null;
+    } catch (error) {
+      console.error("Voice message upload failed:", error);
+      if (activeRecordingSession === session) activeRecordingSession = null;
+    }
+  };
 
-      console.log("Voice message saved:", chatResult);
-    };
+  mediaRecorder.start();
+  recordingStarting = false;
+  isRecording = true;
+  updateRecordingUi();
+  updateRecordingTimer();
+  recordingTimer = setInterval(updateRecordingTimer, 1000);
+}
 
-    mediaRecorder.start();
-
-    isRecording = true;
-
-    document.getElementById(
-      "recordBtn"
-    ).innerHTML = "⏹️ إيقاف";
-
-  } else {
-
-    mediaRecorder.stop();
-
-    isRecording = false;
-
-    document.getElementById(
-      "recordBtn"
-    ).innerHTML = "🎤 تسجيل صوت";
+function finishVoiceRecording(cancel) {
+  if (recordingStarting) {
+    recordingStopRequested = true;
+    recordingCancelled = true;
+    return;
   }
 
+  if (!isRecording || !mediaRecorder) return;
+  if (recordingStopRequested || recordingStopHandled) return;
+
+  const session = activeRecordingSession;
+  if (!session || session.stopRequested || session.finalized) return;
+
+  recordingCancelled = cancel;
+  recordingStopRequested = true;
+  session.stopRequested = true;
+  recordingPointerId = null;
+  recordingSwipeDistance = 0;
+  session.recorder.stop();
+}
+
+function handleRecordingPointerMove(event) {
+  if (!isRecording || event.pointerId !== recordingPointerId) return;
+
+  recordingSwipeDistance = Math.max(0, recordingStartX - event.clientX);
+  const button = document.getElementById("recordBtn");
+  if (button) button.style.setProperty("--recording-swipe", `${Math.min(recordingSwipeDistance, 110)}px`);
+  updateRecordingUi();
+}
+
+window.toggleRecording = function () {
+  if (isRecording) finishVoiceRecording(false);
 };
+
+const recordButton = document.getElementById("recordBtn");
+if (recordButton) {
+  recordButton.addEventListener("pointerdown", (event) => {
+    try {
+      recordButton.setPointerCapture?.(event.pointerId);
+    } catch {}
+    startVoiceRecording(event);
+  });
+  recordButton.addEventListener("pointermove", handleRecordingPointerMove);
+  recordButton.addEventListener("pointerup", (event) => {
+    if (event.pointerId !== recordingPointerId && !recordingStarting) return;
+    finishVoiceRecording(recordingSwipeDistance >= 70);
+    recordButton.style.removeProperty("--recording-swipe");
+  });
+  recordButton.addEventListener("pointercancel", () => {
+    finishVoiceRecording(true);
+    recordButton.style.removeProperty("--recording-swipe");
+  });
+}
+
+document.getElementById("messageInput")?.addEventListener("keydown", (event) => {
+  if (event.key === "Enter" && !event.shiftKey) {
+    event.preventDefault();
+    sendMessage();
+  }
+});

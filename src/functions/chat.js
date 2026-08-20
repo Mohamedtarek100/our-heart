@@ -91,7 +91,14 @@ app.http("sendChat", {
         time: Date.now(),
         status: "delivered",
         seen: false,
-        reaction: ""
+        reaction: "",
+        ...(body.replyToMessageId ? {
+          replyToMessageId: String(body.replyToMessageId),
+          replyToSender: String(body.replyToSender || "Unknown"),
+          replyToText: String(body.replyToText || ""),
+          replyToType: body.replyToType === "voice" ? "voice" : "text",
+          replyToVoice: !!body.replyToVoice
+        } : {})
       };
 
       await container.items.create(item);
@@ -106,6 +113,60 @@ app.http("sendChat", {
 
     } catch (error) {
       context.error("Send chat error:", error);
+
+      return {
+        status: 500,
+        jsonBody: {
+          success: false,
+          error: error.message
+        }
+      };
+    }
+  }
+});
+
+// POST: mark messages from the other user as seen
+app.http("markSeen", {
+  methods: ["POST"],
+  authLevel: "anonymous",
+
+  handler: async (request, context) => {
+    try {
+      const body = await request.json();
+      const user = String(body.user || "").trim();
+
+      if (!user) {
+        return {
+          status: 400,
+          jsonBody: {
+            success: false,
+            error: "user is required"
+          }
+        };
+      }
+
+      const { resources } = await container.items.query({
+        query: "SELECT * FROM c WHERE c.type = 'chat' AND c.sender != @user AND (NOT IS_DEFINED(c.seen) OR c.seen = false)",
+        parameters: [{ name: "@user", value: user }]
+      }).fetchAll();
+
+      const messageIds = [];
+      await Promise.all(resources.map(async (message) => {
+        message.seen = true;
+        message.seenAt = Date.now();
+        await container.item(String(message.id), "chat").replace(message);
+        messageIds.push(String(message.id));
+      }));
+
+      return {
+        status: 200,
+        jsonBody: {
+          success: true,
+          messageIds
+        }
+      };
+    } catch (error) {
+      context.error("Mark seen error:", error);
 
       return {
         status: 500,

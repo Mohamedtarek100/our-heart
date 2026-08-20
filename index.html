@@ -14,7 +14,7 @@ content="width=device-width, initial-scale=1.0"
 
 <link
 rel="stylesheet"
-href="style.css?v=2"
+href="style.css?v=3.2"
 >
 
 </head>
@@ -55,7 +55,7 @@ href="style.css?v=2"
 
 <h1>
 
-❤️ حالتنا اليومية ❤️
+❤️ our life ❤️
 
 </h1>
 
@@ -149,7 +149,7 @@ Mohamed
 
 <h2>
 
-Yomna
+NoNa
 
 </h2>
 
@@ -234,6 +234,19 @@ Yomna
 
 </div>
 
+<button id="newMessagesIndicator" class="newMessagesIndicator" type="button" hidden>
+	<span aria-hidden="true">↓</span>
+	<span>New messages</span>
+</button>
+
+<div id="replyPreview" class="replyPreview" hidden>
+	<span class="replyPreviewBar" aria-hidden="true"></span>
+	<div class="replyPreviewCopy">
+		<strong class="replyPreviewSender"></strong>
+		<span class="replyPreviewText"></span>
+	</div>
+	<button type="button" class="replyPreviewClose" onclick="cancelReply()" aria-label="Cancel reply">×</button>
+</div>
 
 <textarea
 id="messageInput"
@@ -250,17 +263,22 @@ onclick="sendMessage()"
 
 <button
 id="recordBtn"
-onclick="toggleRecording()"
 >
-🎤 تسجيل صوت
+<span aria-hidden="true">🎤</span>
+<span id="recordingLabel">Hold to record</span>
+<span id="recordingTimer" hidden>0:00</span>
+<span id="recordingCancelHint" hidden>Slide left to cancel</span>
 </button>
 
 </div>
 
+<button id="changeAccountButton" type="button" onclick="changeUser()">
+🔄 change account
+</button>
 
 <script
 type="module"
-src="app.js?v=2"
+src="app.js?v=3.2"
 >
 
 </script>
@@ -268,10 +286,3 @@ src="app.js?v=2"
 </body>
 
 </html>
-<button onclick="changeUser()">
-🔄 change account
-</button>
-
-<link rel="stylesheet" href="style.css?v=3.1">
-
-<script type="module" src="app.js?v=3.1"></script>

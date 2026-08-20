@@ -383,20 +383,21 @@ body {
 
 .message {
 	position: relative;
-	padding: 13px 15px;
+	padding: 9px 12px 8px;
 	border: 1px solid var(--line);
-	border-radius: 18px;
+	border-radius: 16px;
 	box-shadow: 0 6px 18px rgba(0, 0, 0, .12);
 	transform: translateX(var(--swipe-distance, 0));
 	touch-action: pan-y;
 	transition: transform .16s ease, box-shadow .2s ease, background .2s ease;
 }
 .message.is-swiping { touch-action: none; transition: none; box-shadow: 0 9px 24px rgba(0, 0, 0, .2); }
+.message.context-selected { z-index: 8; box-shadow: 0 10px 28px rgba(0, 0, 0, .26), 0 0 0 1px rgba(119, 213, 210, .18); }
 .me { background: linear-gradient(135deg, #245651, #285d62); color: var(--text); }
 .her { background: rgba(239, 244, 255, .10); color: var(--text); }
-.messageContent { line-height: 1.55; white-space: pre-wrap; }
+.messageContent { line-height: 1.42; white-space: pre-wrap; }
 .message audio { width: min(100%, 280px); height: 38px; }
-.messageMeta { display: flex; gap: 7px; align-items: center; color: var(--muted); font-size: 11px; }
+.messageMeta { display: flex; gap: 6px; align-items: center; margin-top: 5px; color: var(--muted); font-size: 10px; }
 .messageMeta span:last-child { color: var(--accent); }
 .replyAction {
 	position: absolute; top: 50%; left: -42px; transform: translateY(-50%);
@@ -406,10 +407,22 @@ body {
 }
 .message:hover .replyAction, .replyAction.is-ready { opacity: 1; pointer-events: auto; }
 .replyAction.is-ready { background: var(--accent); border-color: var(--accent); color: #07121c; transform: translateY(-50%) scale(1.14); box-shadow: 0 0 0 5px rgba(119, 213, 210, .12); }
-.reaction { min-height: 20px; margin-top: 3px; }
-.reactionButtons { display: flex; gap: 4px; margin-top: 4px; }
-.reactionButtons button { padding: 3px 5px; font-size: 13px; background: transparent; color: var(--text); }
-.reactionButtons button:hover { background: rgba(255, 255, 255, .12); }
+.reaction { min-height: 0; margin: 3px 0 -2px; font-size: 13px; line-height: 1; }
+.reaction:empty { display: none; }
+.reactionButtons {
+	position: absolute; z-index: 4; top: calc(100% + 7px); right: 4px; display: flex; gap: 2px;
+	padding: 4px; border: 1px solid var(--line); border-radius: 999px;
+	background: rgba(13, 20, 37, .96); box-shadow: 0 10px 24px rgba(0, 0, 0, .3);
+	opacity: 0; pointer-events: none; transform: translateY(4px) scale(.94); transform-origin: bottom right;
+	transition: opacity .15s ease, transform .15s ease;
+}
+.message.reaction-above .reactionButtons { top: auto; bottom: calc(100% + 7px); transform-origin: bottom right; }
+.reactionButtons button { display: grid; place-items: center; width: 30px; height: 30px; padding: 0; border: 0; border-radius: 50%; font-size: 15px; background: transparent; color: var(--text); cursor: pointer; }
+.reactionButtons button:hover, .reactionButtons button:focus-visible { background: rgba(119, 213, 210, .16); outline: none; transform: scale(1.08); }
+.message.show-reactions .reactionButtons { opacity: 1; pointer-events: auto; transform: translateY(0) scale(1); }
+@media (hover: hover) and (pointer: fine) {
+	.message:hover .reactionButtons { opacity: 1; pointer-events: auto; transform: translateY(0) scale(1); }
+}
 
 .replyQuote, .replyPreview {
 	display: flex; align-items: stretch; gap: 9px; text-align: start;
@@ -452,9 +465,12 @@ body {
 	.card { padding: 17px; }
 	#chatBox { height: 54vh; padding: 16px 10px; border-radius: 20px; }
 	.message { max-width: 84%; }
-	.message { padding-inline-end: 54px; }
-	.replyAction { left: auto; right: 8px; top: 11px; width: 40px; height: 40px; opacity: .92; pointer-events: auto; background: rgba(10, 22, 39, .72); box-shadow: 0 6px 14px rgba(0, 0, 0, .2); }
+	.message { padding: 8px 10px 7px; padding-inline-end: 44px; }
+	.replyAction { left: auto; right: 6px; top: 8px; width: 34px; height: 34px; opacity: .84; pointer-events: auto; background: rgba(10, 22, 39, .72); box-shadow: 0 5px 12px rgba(0, 0, 0, .2); }
 	.replyAction:active { transform: translateY(1px) scale(.96); }
+	.reactionButtons { top: auto; right: 6px; bottom: calc(100% + 7px); }
+	.message:not(.reaction-above) .reactionButtons { top: calc(100% + 7px); bottom: auto; }
+	.reactionButtons button { width: 34px; height: 34px; font-size: 16px; }
 	#sendBtn, #recordBtn { width: 48%; font-size: 14px; }
 	#changeAccountButton { width: min(100%, 250px); justify-content: center; }
 }

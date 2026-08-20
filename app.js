@@ -54,6 +54,7 @@ let pressTimer = null;
 let pressState = null;
 let deleteMenuElement = null;
 let deleteMenuMessageId = null;
+let selectedMessageElement = null;
 let replyTarget = null;
 let swipeState = null;
 let sendInFlight = false;
@@ -156,7 +157,7 @@ function buildMessageHtml(msg) {
         ${msg.reaction || ""}
       </div>
 
-      <div class="reactionButtons">
+      <div class="reactionButtons" aria-label="Message reactions">
 
         <button onclick="reactMessage('${msg.id}','❤️')">
           ❤️
@@ -396,6 +397,11 @@ function hideDeleteMenu() {
       }
     }, 140);
   }
+
+  if (selectedMessageElement) {
+    selectedMessageElement.classList.remove("context-selected", "reaction-above");
+    selectedMessageElement = null;
+  }
 }
 
 function positionDeleteMenu(messageElement) {
@@ -421,8 +427,33 @@ function openDeleteMenu(messageElement) {
     return;
   }
 
+  selectMessageContext(messageElement);
   deleteMenuMessageId = messageElement.dataset.messageId || "";
   positionDeleteMenu(messageElement);
+}
+
+function selectMessageContext(messageElement) {
+  document.querySelectorAll(".message.context-selected").forEach((item) => {
+    if (item !== messageElement) item.classList.remove("context-selected", "reaction-above", "show-reactions");
+  });
+
+  selectedMessageElement = messageElement;
+  messageElement.classList.add("context-selected", "show-reactions");
+
+  const chatBox = document.getElementById("chatBox");
+  const reactionPicker = messageElement.querySelector(".reactionButtons");
+  if (!chatBox || !reactionPicker) return;
+
+  messageElement.classList.remove("reaction-above");
+  requestAnimationFrame(() => {
+    const messageRect = messageElement.getBoundingClientRect();
+    const pickerHeight = reactionPicker.getBoundingClientRect().height || 44;
+    const chatRect = chatBox.getBoundingClientRect();
+
+    if (messageRect.bottom + pickerHeight + 12 > chatRect.bottom) {
+      messageElement.classList.add("reaction-above");
+    }
+  });
 }
 
 function isInteractiveMessageTarget(target) {
@@ -453,6 +484,10 @@ function handleChatBoxPointerDown(event) {
 
   clearMessagePressTimer();
 
+  document.querySelectorAll(".message.context-selected").forEach((item) => {
+    if (item !== messageElement) item.classList.remove("context-selected", "reaction-above", "show-reactions");
+  });
+
   pressState = {
     messageElement,
     startX: event.clientX,
@@ -476,6 +511,10 @@ function handleChatBoxPointerDown(event) {
     if (!pressState || pressState.longPressed) return;
 
     pressState.longPressed = true;
+    if (pressState.messageElement.dataset.sender !== currentUser) {
+      hideDeleteMenu();
+    }
+    selectMessageContext(pressState.messageElement);
     openDeleteMenu(pressState.messageElement);
   }, longPressDelayMs);
 }
@@ -709,6 +748,22 @@ if (chatBox) {
   chatBox.addEventListener("click", (event) => {
     const quote = event.target.closest(".replyQuote");
     if (quote) scrollToOriginal(quote.dataset.replyTarget, quote);
+
+    const reactionButton = event.target.closest(".reactionButtons button");
+    if (reactionButton) {
+      const reactionMessage = reactionButton.closest("[data-message-id]");
+      reactionMessage?.classList.remove("show-reactions", "context-selected", "reaction-above");
+      if (selectedMessageElement === reactionMessage) selectedMessageElement = null;
+      return;
+    }
+
+    const message = event.target.closest("[data-message-id]");
+    if (message && !isInteractiveMessageTarget(event.target)) {
+      document.querySelectorAll(".message.show-reactions").forEach((item) => {
+        if (item !== message) item.classList.remove("show-reactions");
+      });
+      message.classList.toggle("show-reactions");
+    }
   });
   chatBox.addEventListener("scroll", () => {
     if (chatBox.scrollHeight - chatBox.clientHeight - chatBox.scrollTop <= 64) {
@@ -720,9 +775,19 @@ if (chatBox) {
 document.getElementById("newMessagesIndicator")?.addEventListener("click", scrollChatToLatest);
 
 document.addEventListener("pointerdown", (event) => {
+  if (!event.target.closest("[data-message-id]")) {
+    document.querySelectorAll(".message.show-reactions").forEach((item) => item.classList.remove("show-reactions"));
+  }
+
   if (!deleteMenuElement || deleteMenuElement.style.display === "none") return;
 
-  if (event.target.closest("#messageDeleteMenu") || event.target.closest("[data-message-id]")) {
+  const messageTarget = event.target.closest("[data-message-id]");
+  if (messageTarget && selectedMessageElement && !selectedMessageElement.contains(messageTarget)) {
+    hideDeleteMenu();
+    return;
+  }
+
+  if (event.target.closest("#messageDeleteMenu") || messageTarget) {
     return;
   }
 

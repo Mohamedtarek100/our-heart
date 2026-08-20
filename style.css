@@ -392,7 +392,12 @@ body {
 	transition: transform .16s ease, box-shadow .2s ease, background .2s ease;
 }
 .message.is-swiping { touch-action: none; transition: none; box-shadow: 0 9px 24px rgba(0, 0, 0, .2); }
-.message.context-selected { z-index: 8; box-shadow: 0 10px 28px rgba(0, 0, 0, .26), 0 0 0 1px rgba(119, 213, 210, .18); }
+.message.context-selected,
+.message.show-reactions {
+	z-index: 1000;
+	isolation: isolate;
+	box-shadow: 0 10px 28px rgba(0, 0, 0, .26), 0 0 0 1px rgba(119, 213, 210, .18);
+}
 .me { background: linear-gradient(135deg, #245651, #285d62); color: var(--text); }
 .her { background: rgba(239, 244, 255, .10); color: var(--text); }
 .messageContent { line-height: 1.42; white-space: pre-wrap; }
@@ -410,9 +415,9 @@ body {
 .reaction { min-height: 0; margin: 3px 0 -2px; font-size: 13px; line-height: 1; }
 .reaction:empty { display: none; }
 .reactionButtons {
-	position: absolute; z-index: 4; top: calc(100% + 7px); right: 4px; display: flex; gap: 2px;
+	position: absolute; z-index: 1001; top: calc(100% + 7px); right: 4px; display: flex; gap: 2px;
 	padding: 4px; border: 1px solid var(--line); border-radius: 999px;
-	background: rgba(13, 20, 37, .96); box-shadow: 0 10px 24px rgba(0, 0, 0, .3);
+	background: rgba(13, 20, 37, .985); box-shadow: 0 14px 30px rgba(0, 0, 0, .42), 0 0 0 1px rgba(119, 213, 210, .08);
 	opacity: 0; pointer-events: none; transform: translateY(4px) scale(.94); transform-origin: bottom right;
 	transition: opacity .15s ease, transform .15s ease;
 }
@@ -474,145 +479,4 @@ body {
 	#sendBtn, #recordBtn { width: 48%; font-size: 14px; }
 	#changeAccountButton { width: min(100%, 250px); justify-content: center; }
 }
-#accessGate {
-  position: fixed;
-  inset: 0;
-  z-index: 99999;
-  display: grid;
-  place-items: center;
-  padding: 24px;
 
-  background:
-    radial-gradient(
-      circle at 20% 10%,
-      rgba(119, 213, 210, .12),
-      transparent 35%
-    ),
-    radial-gradient(
-      circle at 85% 85%,
-      rgba(231, 164, 187, .12),
-      transparent 35%
-    ),
-    var(--bg-deep);
-}
-
-.accessCard {
-  width: min(100%, 380px);
-  padding: 34px 28px;
-  text-align: center;
-
-  border: 1px solid rgba(119, 213, 210, .18);
-  border-radius: 28px;
-
-  background: rgba(15, 23, 42, .78);
-  backdrop-filter: blur(18px);
-
-  box-shadow:
-    0 25px 70px rgba(0, 0, 0, .35),
-    inset 0 1px 0 rgba(255, 255, 255, .05);
-
-  animation: accessCardIn .35s ease;
-}
-
-.accessHeart {
-  font-size: 42px;
-  margin-bottom: 8px;
-}
-
-.accessCard h1 {
-  margin: 0;
-  font-size: 30px;
-}
-
-.accessSubtitle {
-  margin: 8px 0 24px;
-  color: var(--muted);
-}
-
-.accessInputWrap input {
-  width: 100%;
-  height: 52px;
-  padding: 0 16px;
-
-  border: 1px solid rgba(119, 213, 210, .18);
-  border-radius: 16px;
-
-  background: rgba(255, 255, 255, .06);
-  color: var(--text);
-
-  outline: none;
-  text-align: center;
-  font-size: 16px;
-}
-
-.accessInputWrap input:focus {
-  border-color: rgba(119, 213, 210, .55);
-  box-shadow: 0 0 0 3px rgba(119, 213, 210, .08);
-}
-
-#accessSubmit {
-  width: 100%;
-  height: 50px;
-  margin-top: 14px;
-
-  border: 1px solid rgba(119, 213, 210, .25);
-  border-radius: 16px;
-
-  background:
-    linear-gradient(
-      135deg,
-      rgba(119, 213, 210, .18),
-      rgba(231, 164, 187, .18)
-    );
-
-  color: var(--text);
-  font-weight: 700;
-
-  cursor: pointer;
-
-  transition:
-    transform .18s ease,
-    background .18s ease,
-    box-shadow .18s ease;
-}
-
-#accessSubmit:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 12px 30px rgba(0, 0, 0, .22);
-}
-
-.accessError {
-  margin: 14px 0 0;
-  color: #ffb4c5;
-  font-size: 14px;
-}
-
-.access-shake {
-  animation: accessShake .3s ease;
-}
-
-@keyframes accessCardIn {
-  from {
-    opacity: 0;
-    transform: translateY(12px) scale(.97);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
-@keyframes accessShake {
-  0%, 100% { transform: translateX(0); }
-  25% { transform: translateX(-7px); }
-  50% { transform: translateX(7px); }
-  75% { transform: translateX(-4px); }
-}
-
-@media (max-width: 480px) {
-  .accessCard {
-    padding: 30px 20px;
-    border-radius: 24px;
-  }
-}

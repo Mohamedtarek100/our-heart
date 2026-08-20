@@ -61,6 +61,8 @@ let sendInFlight = false;
 let chatHasLoaded = false;
 let newMessagesPending = false;
 const knownServerMessageIds = new Set();
+let latestServerMessageTime = 0;
+let fastMessagePollInFlight = false;
 
 function escapeHtml(value) {
   return String(value || "")
@@ -1036,6 +1038,107 @@ if (!useAzurePresence) {
 }
 
 
+async function pollNewMessages() {
+  if (fastMessagePollInFlight) return;
+
+  const chatBox = document.getElementById("chatBox");
+  if (!chatBox || !chatHasLoaded || !latestServerMessageTime) return;
+
+  fastMessagePollInFlight = true;
+
+  try {
+    const response = await fetch(
+      `${azureBaseUrl}/getNewMessages?after=${encodeURIComponent(latestServerMessageTime)}`,
+      { cache: "no-store" }
+    );
+
+    const messages = await response.json();
+
+    if (!response.ok || !Array.isArray(messages)) {
+      return;
+    }
+
+    const incoming = [];
+
+    for (const rawMessage of messages) {
+      const message = normalizeMessage(rawMessage);
+      if (!message) continue;
+
+      latestServerMessageTime = Math.max(
+        latestServerMessageTime,
+        Number(message.time) || 0
+      );
+
+      if (deletedMessageIds.has(message.id)) continue;
+
+      if (Date.now() - message.time >= 48 * 60 * 60 * 1000) continue;
+
+      if (knownServerMessageIds.has(message.id)) {
+        const existing = messageStore.get(message.id);
+        if (existing && existing.seen !== message.seen) {
+          messageStore.set(message.id, message);
+          window.chatMessages = (window.chatMessages || []).map(item =>
+            normalizeMessageId(item.id) === message.id ? message : item
+          );
+        }
+        continue;
+      }
+
+      knownServerMessageIds.add(message.id);
+      messageStore.set(message.id, message);
+
+      const existingPending = pendingLocalMessages.get(message.id);
+      if (existingPending) {
+        pendingLocalMessages.delete(message.id);
+      }
+
+      incoming.push(message);
+    }
+
+    if (!incoming.length) return;
+
+    const wasNearBottom =
+      chatBox.scrollHeight - chatBox.clientHeight - chatBox.scrollTop <= 64;
+
+    const currentMessages = new Map(
+      (window.chatMessages || []).map(message => {
+        const normalized = normalizeMessage(message);
+        return [normalized.id, normalized];
+      })
+    );
+
+    for (const message of incoming) {
+      currentMessages.set(message.id, message);
+    }
+
+    window.chatMessages = [...currentMessages.values()]
+      .sort((a, b) => Number(a.time) - Number(b.time));
+
+    for (const message of incoming) {
+      const existingElement = chatBox.querySelector(
+        `[data-message-id="${CSS.escape(message.id)}"]`
+      );
+
+      if (existingElement) continue;
+
+      chatBox.insertAdjacentHTML("beforeend", buildMessageHtml(message));
+    }
+
+    if (wasNearBottom) {
+      chatBox.scrollTop = chatBox.scrollHeight;
+      clearNewMessagesIndicator();
+    } else {
+      showNewMessagesIndicator();
+    }
+
+    markVisibleMessagesSeen();
+  } catch (error) {
+    console.error("Fast new-message poll failed:", error);
+  } finally {
+    fastMessagePollInFlight = false;
+  }
+}
+
 // الشات - Cosmos DB
 async function loadChat() {
   try {
@@ -1060,6 +1163,14 @@ async function loadChat() {
     const serverMessages = messages
       .map(normalizeMessage)
       .filter(Boolean);
+
+    if (serverMessages.length) {
+      latestServerMessageTime = Math.max(
+        latestServerMessageTime,
+        ...serverMessages.map(message => Number(message.time) || 0)
+      );
+    }
+
     const mergedMessages = new Map();
     const newIncomingMessageIds = new Set();
 
@@ -1163,8 +1274,11 @@ chatBox.innerHTML = html;
 // تحميل أول مرة
 loadChat();
 
-// تحديث الشات كل 5 ثواني
+// مزامنة كاملة كل 5 ثواني
 setInterval(loadChat, 5000);
+
+// مزامنة خفيفة للرسائل الجديدة فقط كل 1.5 ثانية
+setInterval(pollNewMessages, 1500);
 
 window.reactMessage = async function(messageId, emoji){
 

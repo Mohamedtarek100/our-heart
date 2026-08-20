@@ -51,6 +51,62 @@ app.http("getChat", {
   }
 });
 
+
+// GET: الرسائل الجديدة فقط بعد وقت محدد (مسار خفيف للمزامنة السريعة)
+app.http("getNewMessages", {
+  methods: ["GET"],
+  authLevel: "anonymous",
+
+  handler: async (request, context) => {
+    try {
+      const afterParam = request.query.get("after");
+      const after = Number(afterParam);
+
+      if (!Number.isFinite(after)) {
+        return {
+          status: 400,
+          jsonBody: {
+            success: false,
+            error: "after must be a valid timestamp"
+          }
+        };
+      }
+
+      const querySpec = {
+        query: `
+          SELECT TOP 50 *
+          FROM c
+          WHERE c.type = "chat"
+            AND c.time >= @after
+          ORDER BY c.time ASC
+        `,
+        parameters: [
+          { name: "@after", value: after }
+        ]
+      };
+
+      const { resources } = await container.items
+        .query(querySpec)
+        .fetchAll();
+
+      return {
+        status: 200,
+        jsonBody: resources
+      };
+    } catch (error) {
+      context.error("Get new messages error:", error);
+
+      return {
+        status: 500,
+        jsonBody: {
+          success: false,
+          error: error.message
+        }
+      };
+    }
+  }
+});
+
 // POST: إضافة رسالة
 app.http("sendChat", {
   methods: ["POST"],

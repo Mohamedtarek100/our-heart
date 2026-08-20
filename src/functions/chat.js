@@ -73,7 +73,7 @@ app.http("getNewMessages", {
         };
       }
 
-      const hasSeenCursor = Number.isFinite(seenAfter) && seenAfter > 0 && !!user;
+      const hasSeenCursor = Number.isFinite(seenAfter) && !!user;
 
       const query = hasSeenCursor
         ? `
@@ -144,14 +144,29 @@ app.http("sendChat", {
         };
       }
 
-      // لازم يكون فيه نص أو voiceUrl
-      if (!body.text && !body.voiceUrl) {
+      const messageType = body.type === "sticker" || body.type === "gif" ? body.type : body.voiceUrl ? "voice" : "text";
+      const mediaUrl = body.voiceUrl || body.stickerUrl || body.gifUrl || "";
+      if ((messageType === "text" && !body.text) || (messageType !== "text" && !mediaUrl)) {
         return {
           status: 400,
           jsonBody: {
             success: false,
-            error: "text or voiceUrl is required"
+            error: "valid message content is required"
           }
+        };
+      }
+
+      if (messageType !== "text" && !/^https:\/\//i.test(String(mediaUrl))) {
+        return {
+          status: 400,
+          jsonBody: { success: false, error: "media URL must use HTTPS" }
+        };
+      }
+
+      if (["sticker", "gif"].includes(messageType) && !/^https:\/\/(?:media\d*\.giphy\.com|i\.giphy\.com|giphy\.com)\//i.test(String(mediaUrl))) {
+        return {
+          status: 400,
+          jsonBody: { success: false, error: "unsupported media host" }
         };
       }
 
@@ -159,8 +174,15 @@ app.http("sendChat", {
         id: crypto.randomUUID(),
         type: "chat",
         sender: body.sender,
+        messageType,
         text: body.text || "",
         voiceUrl: body.voiceUrl || "",
+        stickerUrl: messageType === "sticker" ? String(body.stickerUrl || "") : "",
+        stickerPack: messageType === "sticker" ? String(body.stickerPack || "") : "",
+        stickerName: messageType === "sticker" ? String(body.stickerName || "Sticker") : "",
+        gifUrl: messageType === "gif" ? String(body.gifUrl || "") : "",
+        gifPreview: messageType === "gif" ? String(body.gifPreview || body.gifUrl || "") : "",
+        gifName: messageType === "gif" ? String(body.gifName || "GIF") : "",
         time: Date.now(),
         status: "delivered",
         seen: false,
@@ -169,7 +191,7 @@ app.http("sendChat", {
           replyToMessageId: String(body.replyToMessageId),
           replyToSender: String(body.replyToSender || "Unknown"),
           replyToText: String(body.replyToText || ""),
-          replyToType: body.replyToType === "voice" ? "voice" : "text",
+          replyToType: ["voice", "sticker", "gif"].includes(body.replyToType) ? body.replyToType : "text",
           replyToVoice: !!body.replyToVoice
         } : {})
       };
@@ -224,9 +246,12 @@ app.http("markSeen", {
       }).fetchAll();
 
       const messageIds = [];
-      await Promise.all(resources.map(async (message) => {
+      let seenCursor = 0;
+      const seenBase = Date.now();
+      await Promise.all(resources.map(async (message, index) => {
         message.seen = true;
-        message.seenAt = Date.now();
+        message.seenAt = seenBase + index;
+        seenCursor = Math.max(seenCursor, message.seenAt);
         await container.item(String(message.id), "chat").replace(message);
         messageIds.push(String(message.id));
       }));
@@ -235,7 +260,8 @@ app.http("markSeen", {
         status: 200,
         jsonBody: {
           success: true,
-          messageIds
+          messageIds,
+          seenCursor
         }
       };
     } catch (error) {

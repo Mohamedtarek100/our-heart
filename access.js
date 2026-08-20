@@ -3,16 +3,22 @@ const ACCESS_CODE_HASH =
 
 const ACCESS_STORAGE_KEY = "ourHeartAccessGrantedAt";
 const ACCESS_DURATION = 24 * 60 * 60 * 1000;
+const ACCESS_VERSION = "3.3";
 
 const mainApp = document.getElementById("mainApp");
 const userSelector = document.getElementById("userSelector");
 
 function hasValidAccess() {
-  const timestamp = Number(localStorage.getItem(ACCESS_STORAGE_KEY));
+  const rawTimestamp = localStorage.getItem(ACCESS_STORAGE_KEY);
+  const timestamp = Number(rawTimestamp);
 
-  if (!timestamp) return false;
+  if (!Number.isSafeInteger(timestamp) || timestamp <= 0) {
+    localStorage.removeItem(ACCESS_STORAGE_KEY);
+    return false;
+  }
 
-  const valid = Date.now() - timestamp < ACCESS_DURATION;
+  const age = Date.now() - timestamp;
+  const valid = age >= 0 && age < ACCESS_DURATION;
 
   if (!valid) {
     localStorage.removeItem(ACCESS_STORAGE_KEY);
@@ -33,7 +39,7 @@ function showAppShell() {
       localStorage.getItem("currentUser") ? "block" : "none";
   }
 
-  import("./app.js?v=3.2");
+  import(`./app.js?v=${ACCESS_VERSION}`);
 }
 
 async function sha256(text) {
@@ -78,7 +84,7 @@ function createAccessGate() {
         Enter ❤️
       </button>
 
-      <p id="accessError" class="accessError" hidden>
+      <p id="accessError" class="accessError" aria-live="polite" hidden>
         Incorrect access code.
       </p>
     </div>
@@ -91,35 +97,50 @@ function createAccessGate() {
   const error = document.getElementById("accessError");
 
   async function submitCode() {
+    if (button.disabled) return;
     const code = input.value.trim();
 
     if (!code) return;
 
-    const hash = await sha256(code);
+    button.disabled = true;
+    button.classList.add("is-loading");
+    error.hidden = true;
 
-    if (hash === ACCESS_CODE_HASH) {
-      localStorage.setItem(
-        ACCESS_STORAGE_KEY,
-        String(Date.now())
-      );
+    try {
+      const hash = await sha256(code);
 
-      showAppShell();
-      return;
-    }
+      if (hash === ACCESS_CODE_HASH) {
+        localStorage.setItem(
+          ACCESS_STORAGE_KEY,
+          String(Date.now())
+        );
 
-    error.hidden = false;
-    input.value = "";
-    input.focus();
+        showAppShell();
+        return;
+      }
 
-    gate
-      .querySelector(".accessCard")
-      ?.classList.remove("access-shake");
+      error.textContent = "Incorrect access code.";
+      error.hidden = false;
+      input.value = "";
+      input.focus();
 
-    requestAnimationFrame(() => {
       gate
         .querySelector(".accessCard")
-        ?.classList.add("access-shake");
-    });
+        ?.classList.remove("access-shake");
+
+      requestAnimationFrame(() => {
+        gate
+          .querySelector(".accessCard")
+          ?.classList.add("access-shake");
+      });
+    } catch (submitError) {
+      console.error("Access verification failed:", submitError);
+      error.textContent = "Unable to verify access. Try again.";
+      error.hidden = false;
+    } finally {
+      button.disabled = false;
+      button.classList.remove("is-loading");
+    }
   }
 
   button.addEventListener("click", submitCode);

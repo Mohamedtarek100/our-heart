@@ -7,14 +7,16 @@
 
 <meta
 name="viewport"
-content="width=device-width, initial-scale=1.0"
+content="width=device-width, initial-scale=1.0, viewport-fit=cover"
 >
+
+<meta name="theme-color" content="#080d1b">
 
 <title>❤️ Our Heart</title>
 
 <link
 rel="stylesheet"
-href="style.css?v=3.2"
+href="style.css?v=3.3"
 >
 
 </head>
@@ -133,7 +135,7 @@ Mohamed
 </h3>
 
 
-<p id="mohamedStatus">
+<p id="mohamedStatus" aria-live="polite">
 
 </p>
 
@@ -212,7 +214,7 @@ NoNa
 </h3>
 
 
-<p id="yomnaStatus">
+<p id="yomnaStatus" aria-live="polite">
 
 </p>
 
@@ -248,27 +250,33 @@ NoNa
 	<button type="button" class="replyPreviewClose" onclick="cancelReply()" aria-label="Cancel reply">×</button>
 </div>
 
-<textarea
-id="messageInput"
-placeholder="اكتب رسالة..."
-oninput="typing()"
-></textarea>
+<div class="composerTools" aria-label="Message tools">
+	<button id="stickerBtn" type="button" aria-label="Open stickers">☺</button>
+	<button id="gifBtn" type="button" aria-label="Open GIFs">GIF</button>
+	<textarea id="messageInput" placeholder="اكتب رسالة..." aria-label="Message" oninput="typing()"></textarea>
+	<button id="sendBtn" type="button" onclick="sendMessage()" aria-label="Send message">↗</button>
+	<button id="recordBtn" type="button" aria-label="Record voice message">
+		<span aria-hidden="true">🎤</span>
+		<span id="recordingLabel">Hold to record</span>
+		<span id="recordingTimer" hidden>0:00</span>
+		<span id="recordingCancelHint" hidden>Slide left to cancel</span>
+	</button>
+	<div id="recordingOverlay" class="recordingOverlay" hidden aria-live="polite">
+		<span class="recordingCancelLabel">← Slide to cancel</span>
+		<strong id="recordingOverlayTimer">0:00</strong>
+		<span id="recordingOverlayHint">Slide left to cancel</span>
+	</div>
+</div>
 
-<button
-id="sendBtn"
-onclick="sendMessage()"
->
-❤️ إرسال
-</button>
-
-<button
-id="recordBtn"
->
-<span aria-hidden="true">🎤</span>
-<span id="recordingLabel">Hold to record</span>
-<span id="recordingTimer" hidden>0:00</span>
-<span id="recordingCancelHint" hidden>Slide left to cancel</span>
-</button>
+<div id="mediaPicker" class="mediaPicker" hidden>
+	<div class="mediaPickerHeader">
+		<strong id="mediaPickerTitle">Stickers</strong>
+		<button id="mediaPickerClose" type="button" aria-label="Close picker">×</button>
+	</div>
+	<input id="mediaSearchInput" type="search" placeholder="Search" aria-label="Search stickers or GIFs">
+	<div id="mediaResults" class="mediaResults" role="listbox" aria-label="Media results"></div>
+	<p id="mediaPickerStatus" class="mediaPickerStatus" aria-live="polite"></p>
+</div>
 
 </div>
 
@@ -280,8 +288,6 @@ id="recordBtn"
 type="module"
 src="access.js?v=1"
 ></script>
-
-</script>
 
 </body>
 

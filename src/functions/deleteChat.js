@@ -16,8 +16,8 @@ app.http("deleteChat", {
   handler: async (request, context) => {
     try {
       const body = await request.json();
-      const messageId = body.messageId;
-      const user = body.user || body.sender;
+      const messageId = String(body.messageId || "").trim();
+      const user = String(body.user || body.sender || "").trim();
 
       if (!messageId) {
         return {
@@ -51,7 +51,7 @@ app.http("deleteChat", {
         };
       }
 
-      if (message.sender !== user) {
+      if (String(message.sender || "") !== user) {
         return {
           status: 403,
           jsonBody: {

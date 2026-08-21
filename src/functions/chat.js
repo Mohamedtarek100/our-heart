@@ -9,7 +9,7 @@ const client = new CosmosClient({
 const database = client.database(process.env.COSMOS_DATABASE);
 const container = database.container(process.env.COSMOS_CONTAINER);
 
-// GET: آخر 30 رسالة
+// GET: آخر 60 رسالة
 app.http("getChat", {
   methods: ["GET"],
   authLevel: "anonymous",
@@ -18,7 +18,7 @@ app.http("getChat", {
     try {
       const querySpec = {
         query: `
-          SELECT TOP 30 *
+          SELECT TOP 60 *
           FROM c
           WHERE c.type = "chat"
           ORDER BY c.time DESC

@@ -443,7 +443,13 @@ function ensureSelectionToolbar() {
     <button class="selectionReply" type="button" aria-label="Reply to selected message">↩</button>
     <button class="selectionReact" type="button" aria-label="React to selected message">♥</button>
   `;
-  document.body.appendChild(selectionToolbarElement);
+  const chatWorkspace = document.getElementById("chatWorkspace");
+  const chatBox = document.getElementById("chatBox");
+  if (chatWorkspace && chatBox) {
+    chatWorkspace.insertBefore(selectionToolbarElement, chatBox);
+  } else {
+    document.body.appendChild(selectionToolbarElement);
+  }
 
   selectionToolbarElement.querySelector(".selectionClose").onclick = clearSelectionMode;
   selectionToolbarElement.querySelector(".selectionDelete").onclick = deleteSelectedMessages;
@@ -646,6 +652,9 @@ function handleChatBoxPointerMove(event) {
         swipeState.engaged = false;
         swipeState.messageElement.classList.remove("is-swiping");
         swipeState.messageElement.style.removeProperty("--swipe-distance");
+        swipeState.messageElement.style.removeProperty("--reply-opacity");
+        swipeState.messageElement.style.removeProperty("--reply-scale");
+        swipeState.messageElement.querySelector(".replyAction")?.classList.remove("is-ready");
         swipeState = null;
         clearMessagePressTimer();
         return;
@@ -665,11 +674,21 @@ function handleChatBoxPointerMove(event) {
       swipeState.engaged = true;
       swipeState.distance = Math.min(distance, 76);
       swipeState.messageElement.style.setProperty("--swipe-distance", `${swipeState.distance}px`);
+      swipeState.messageElement.style.setProperty(
+        "--reply-opacity",
+        String(Math.min(1, swipeState.distance / replySwipeTriggerDistancePx))
+      );
+      swipeState.messageElement.style.setProperty(
+        "--reply-scale",
+        String(0.82 + Math.min(1, swipeState.distance / replySwipeTriggerDistancePx) * 0.18)
+      );
       swipeState.messageElement.classList.add("is-swiping");
       swipeState.messageElement.querySelector(".replyAction")?.classList.toggle("is-ready", distance >= replySwipeTriggerDistancePx);
     } else if (swipeState.directionLocked && deltaX <= 0) {
       swipeState.distance = 0;
       swipeState.messageElement.style.removeProperty("--swipe-distance");
+      swipeState.messageElement.style.removeProperty("--reply-opacity");
+      swipeState.messageElement.style.removeProperty("--reply-scale");
       swipeState.messageElement.classList.remove("is-swiping");
       swipeState.messageElement.querySelector(".replyAction")?.classList.remove("is-ready");
     }
@@ -694,6 +713,8 @@ function handleChatBoxPointerEnd(event) {
       if (message) setReplyTarget(message);
     }
     swipeState.messageElement.style.removeProperty("--swipe-distance");
+    swipeState.messageElement.style.removeProperty("--reply-opacity");
+    swipeState.messageElement.style.removeProperty("--reply-scale");
     swipeState.messageElement.classList.remove("is-swiping");
     swipeState.messageElement.querySelector(".replyAction")?.classList.remove("is-ready");
     swipeState = null;
@@ -856,18 +877,83 @@ if (currentUser !== "Mohamed" && currentUser !== "Yomna") {
   localStorage.removeItem("currentUser");
 }
 
+const otherUser = currentUser === "Mohamed" ? "Yomna" : "Mohamed";
+
+function updateChatHeader() {
+  const name = document.getElementById("partnerName");
+  const avatar = document.getElementById("partnerAvatar");
+  if (name) name.textContent = otherUser || "Our Heart";
+  if (avatar) avatar.textContent = otherUser === "Yomna" ? "Y" : "M";
+}
+
+function updateExpandButton() {
+  const button = document.getElementById("chatExpandButton");
+  const workspace = document.getElementById("chatWorkspace");
+  const expanded = !!workspace?.classList.contains("is-expanded") || document.fullscreenElement === workspace;
+  if (!button) return;
+  button.textContent = expanded ? "×" : "⛶";
+  button.setAttribute("aria-label", expanded ? "Exit expanded chat" : "Expand chat");
+  button.setAttribute("aria-pressed", String(expanded));
+}
+
+async function toggleExpandedChat() {
+  const workspace = document.getElementById("chatWorkspace");
+  const chatBox = document.getElementById("chatBox");
+  if (!workspace) return;
+  const previousScrollTop = chatBox?.scrollTop || 0;
+
+  if (document.fullscreenElement === workspace) {
+    if (document.exitFullscreen) {
+      await document.exitFullscreen().catch(() => {});
+    }
+    workspace.classList.remove("is-expanded");
+  } else if (workspace.classList.contains("is-expanded")) {
+    workspace.classList.remove("is-expanded");
+  } else {
+    workspace.classList.add("is-expanded");
+    try {
+      if (workspace.requestFullscreen) await workspace.requestFullscreen();
+    } catch {}
+  }
+  updateExpandButton();
+  if (chatBox) {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        chatBox.scrollTop = Math.min(previousScrollTop, Math.max(0, chatBox.scrollHeight - chatBox.clientHeight));
+      });
+    });
+  }
+}
+
 const mainApp = document.getElementById("mainApp");
 const userSelector = document.getElementById("userSelector");
+updateChatHeader();
 
 if (currentUser === "Mohamed" || currentUser === "Yomna") {
 
   mainApp.style.display = "block";
+  mainApp.classList.add("is-authenticated");
   userSelector.style.display = "none";
   updateOnlineStatus();
 
 }
 
 const chatBox = document.getElementById("chatBox");
+
+document.getElementById("chatExpandButton")?.addEventListener("click", toggleExpandedChat);
+document.addEventListener("fullscreenchange", () => {
+  const workspace = document.getElementById("chatWorkspace");
+  if (workspace && document.fullscreenElement !== workspace && document.fullscreenElement === null) {
+    workspace.classList.remove("is-expanded");
+  }
+  updateExpandButton();
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") {
+    document.getElementById("chatWorkspace")?.classList.remove("is-expanded");
+    updateExpandButton();
+  }
+});
 
 if (chatBox) {
   chatBox.addEventListener("pointerdown", handleChatBoxPointerDown);
@@ -1621,13 +1707,6 @@ localStorage.removeItem("currentUser");
 location.reload();
 
 }
-let otherUser =
-currentUser === "Mohamed"
-?
-"Yomna"
-:
-"Mohamed";
-
 async function refreshPresenceFromAzure() {
   if (!currentUser || document.hidden) return;
 

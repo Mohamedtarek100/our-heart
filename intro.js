@@ -26,7 +26,7 @@
    ============================================================ */
 
 const INTRO_STYLESHEET_ID = "romanticIntroStyles";
-const INTRO_STYLESHEET_HREF = "intro.css?v=4";
+const INTRO_STYLESHEET_HREF = "intro.css?v=5";
 
 /* Timeline (ms from scene-1 start). Total ~21s — under the 30s
    ceiling, and never padded with dead time. */
@@ -494,10 +494,23 @@ export function showRomanticIntro(options = {}) {
       rafId = requestAnimationFrame(drawFrame);
     }
 
-    /* Parallax: one transform write per layer per changed frame. */
-    const parallaxEls = Array.prototype.slice.call(
-      root.querySelectorAll(".intro-parallax")
-    );
+    /* Parallax: one transform write per layer per changed frame.
+       It ONLY ever writes to dedicated .intro-parallax wrapper
+       elements. The animated nodes (heart / svg / copy) live INSIDE
+       those wrappers, so the scene animations own their own transform
+       and parallax can never cancel or override them. This is what
+       keeps the desktop cinematic sequence independent of the mouse. */
+    const parallaxEls = Array.prototype.slice
+      .call(root.querySelectorAll(".intro-parallax"))
+      .filter((el) => {
+        // Defensive: never target a wrapper that itself carries an
+        // animation, or that contains no animated child. A parallax
+        // wrapper must be a pure, non-animated parent layer.
+        if (typeof el.getAnimations === "function" && el.getAnimations().length) {
+          return false;
+        }
+        return true;
+      });
     let lastParallaxX = 999;
     let lastParallaxY = 999;
 

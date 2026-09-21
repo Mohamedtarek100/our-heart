@@ -4,7 +4,7 @@ const ACCESS_CODE_HASH =
 const ACCESS_STORAGE_KEY = "ourHeartAccessGrantedAt";
 const ACCESS_DURATION = 24 * 60 * 60 * 1000;
 const ACCESS_VERSION = "4.8";
-const INTRO_VERSION = "4";
+const INTRO_VERSION = "5";
 
 const mainApp = document.getElementById("mainApp");
 const userSelector = document.getElementById("userSelector");

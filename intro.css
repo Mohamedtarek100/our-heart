@@ -1,0 +1,587 @@
+/* ============================================================
+   Our Heart — Cinematic Opening Experience
+   Isolated stylesheet. Scoped under #romanticIntro so it can
+   never leak into the chat UI. Loaded only while the intro runs.
+   ============================================================ */
+
+#romanticIntro {
+	position: fixed;
+	z-index: 9000;
+	inset: 0;
+	display: grid;
+	place-items: center;
+	width: 100vw;
+	height: 100dvh;
+	/* Fallbacks for browsers without dvh */
+	height: 100vh;
+	overflow: hidden;
+	background: #05060d;
+	color: #fdf3f6;
+	/* The page is Arabic (dir="rtl"). The intro copy is English, so the
+	   layer pins its own LTR direction to avoid RTL reordering the
+	   punctuation (a stray leading "." before the subtitle). */
+	direction: ltr;
+	isolation: isolate;
+	contain: strict;
+	touch-action: none;
+	-webkit-tap-highlight-color: transparent;
+	opacity: 1;
+	transition: opacity .9s ease, transform .9s ease;
+}
+
+@supports (height: 100dvh) {
+	#romanticIntro { height: 100dvh; }
+}
+
+#romanticIntro.is-leaving {
+	opacity: 0;
+	transform: scale(1.02);
+	pointer-events: none;
+}
+
+/* Deep radial depth — cheap: static gradients, no blur/filter */
+#romanticIntro .intro-bg {
+	position: absolute;
+	inset: 0;
+	background:
+	radial-gradient(120% 90% at 50% 22%, rgba(120, 40, 92, 0.42), transparent 62%),
+	radial-gradient(90% 70% at 50% 92%, rgba(30, 66, 120, 0.34), transparent 66%),
+	linear-gradient(160deg, #080a17 0%, #05060d 55%, #04040a 100%);
+}
+
+/* Soft central glow behind the heart (static gradient; scene-driven). */
+#romanticIntro .intro-glow {
+	position: absolute;
+	top: 40%;
+	left: 50%;
+	width: min(120vw, 640px);
+	height: min(120vw, 640px);
+	border-radius: 50%;
+	transform: translate3d(-50%, -50%, 0) scale(0.9);
+	background: radial-gradient(circle, rgba(255, 120, 168, 0.30), rgba(255, 90, 150, 0.10) 42%, transparent 68%);
+	will-change: transform, opacity;
+	opacity: 0;
+}
+
+/* Light rays behind the heart (scene 2+) — static conic-ish gradient,
+   only opacity/scale are animated, so it stays cheap. */
+#romanticIntro .intro-rays {
+	position: absolute;
+	top: 40%;
+	left: 50%;
+	width: min(150vw, 900px);
+	height: min(150vw, 900px);
+	transform: translate3d(-50%, -50%, 0) scale(0.6) rotate(0deg);
+	opacity: 0;
+	pointer-events: none;
+	background: conic-gradient(
+	from 0deg,
+		transparent 0deg, rgba(255, 150, 195, 0.10) 20deg, transparent 40deg,
+		transparent 90deg, rgba(255, 150, 195, 0.08) 110deg, transparent 130deg,
+		transparent 180deg, rgba(255, 150, 195, 0.10) 200deg, transparent 220deg,
+		transparent 270deg, rgba(255, 150, 195, 0.08) 290deg, transparent 310deg
+	);
+	will-change: transform, opacity;
+}
+
+/* Particle canvas — full bleed, GPU friendly, no layout thrash */
+#romanticIntro .intro-particles {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	display: block;
+	pointer-events: none;
+}
+
+/* Vignette for cinematic framing */
+#romanticIntro .intro-vignette {
+	position: absolute;
+	inset: 0;
+	pointer-events: none;
+	background: radial-gradient(120% 80% at 50% 50%, transparent 52%, rgba(0, 0, 0, 0.55) 100%);
+}
+
+/* ---------- Composition ---------- */
+
+#romanticIntro .intro-stage {
+	position: relative;
+	z-index: 2;
+	display: grid;
+	justify-items: center;
+	gap: clamp(12px, 2.6vmin, 26px);
+	width: min(100%, 560px);
+	max-width: 560px;
+	margin: 0 auto;
+	padding:
+		max(22px, env(safe-area-inset-top))
+		max(22px, env(safe-area-inset-right))
+		max(22px, env(safe-area-inset-bottom))
+		max(22px, env(safe-area-inset-left));
+	text-align: center;
+}
+
+/* --- Heart --- */
+
+#romanticIntro .intro-heart {
+	position: relative;
+	width: clamp(96px, 34vmin, 190px);
+	height: clamp(96px, 34vmin, 190px);
+	display: grid;
+	place-items: center;
+	/* Scene-driven: hidden until scene 2 draws it in. */
+	opacity: 0;
+	transform: translate3d(0, 22px, 0) scale(.88);
+	will-change: transform, opacity;
+}
+
+#romanticIntro .intro-heart svg {
+	width: 100%;
+	height: 100%;
+	display: block;
+	overflow: visible;
+}
+#romanticIntro .intro-heart .heart-fill {
+	fill: url(#introHeartGrad);
+}
+#romanticIntro .intro-heart .heart-stroke {
+	fill: none;
+	stroke: rgba(255, 190, 212, 0.55);
+	stroke-width: 1.4;
+}
+
+/* Soft halo hugging the heart, brightens on beat (scene-driven). */
+#romanticIntro .intro-heart-halo {
+	position: absolute;
+	inset: -18%;
+	border-radius: 50%;
+	opacity: 0;
+	pointer-events: none;
+	background: radial-gradient(circle, rgba(255, 130, 175, 0.32), rgba(255, 90, 150, 0.08) 46%, transparent 70%);
+	will-change: transform, opacity;
+}
+
+/* Expanding love "ripple" rings (concentric light waves on the beat) */
+#romanticIntro .intro-ring {
+	position: absolute;
+	inset: 0;
+	border-radius: 50%;
+	border: 1px solid rgba(255, 130, 175, 0.35);
+	transform: scale(.6);
+	opacity: 0;
+	pointer-events: none;
+}
+
+/* --- Typography --- */
+
+#romanticIntro .intro-copy {
+	display: grid;
+	gap: clamp(6px, 1.4vmin, 14px);
+	justify-items: center;
+	width: 100%;
+}
+
+#romanticIntro .intro-eyebrow {
+	font-family: Georgia, "Times New Roman", serif;
+	font-size: clamp(9px, 2.4vmin, 13px);
+	letter-spacing: clamp(.28em, 1.6vmin, .5em);
+	text-transform: uppercase;
+	color: rgba(240, 205, 220, 0.72);
+	opacity: 0;
+	transform: translate3d(0, 12px, 0);
+	will-change: transform, opacity, filter;
+}
+
+/* The headline. clamp keeps it readable at 360px and controlled on desktop. */
+#romanticIntro .intro-title {
+	margin: 0;
+	max-width: 100%;
+	font-family: Georgia, "Times New Roman", "Amiri", serif;
+	font-weight: 400;
+	line-height: 1.12;
+	letter-spacing: .012em;
+	/* 30px floor so "Yomna" never clips on 360px; capped so it stays elegant wide */
+	font-size: clamp(30px, 8.6vmin, 74px);
+	color: #fff6f9;
+	text-wrap: balance;
+	overflow-wrap: break-word;
+	text-shadow: 0 2px 30px rgba(255, 120, 170, 0.45);
+}
+#romanticIntro .intro-title .intro-line {
+	display: block;
+	opacity: 0;
+	transform: translate3d(0, 22px, 0);
+	will-change: transform, opacity, filter;
+}
+
+/* The name gets an accent treatment */
+#romanticIntro .intro-name {
+	font-style: italic;
+	background: linear-gradient(120deg, #ffd9e6 0%, #ff9ec4 48%, #f7c58c 100%);
+	-webkit-background-clip: text;
+	background-clip: text;
+	color: transparent;
+	-webkit-text-fill-color: transparent;
+}
+
+#romanticIntro .intro-subtitle {
+	margin: 0;
+	max-width: 42ch;
+	font-family: Georgia, "Times New Roman", serif;
+	font-size: clamp(12px, 3.2vmin, 17px);
+	line-height: 1.6;
+	color: rgba(244, 226, 234, 0.82);
+	opacity: 0;
+	transform: translate3d(0, 14px, 0);
+	will-change: transform, opacity, filter;
+}
+
+/* Thin growing divider under the message */
+#romanticIntro .intro-divider {
+	width: 0;
+	height: 1px;
+	margin-top: clamp(2px, 1vmin, 8px);
+	background: linear-gradient(90deg, transparent, rgba(255, 150, 190, 0.85), transparent);
+}
+
+/* ---------- Skip control ---------- */
+
+#romanticIntro .intro-skip {
+	position: absolute;
+	z-index: 5;
+	top: max(14px, env(safe-area-inset-top));
+	right: max(14px, env(safe-area-inset-right));
+	display: inline-flex;
+	align-items: center;
+	gap: 7px;
+	min-height: 44px;
+	padding: 10px 16px;
+	border: 1px solid rgba(255, 170, 200, 0.4);
+	border-radius: 999px;
+	color: #ffeaf2;
+	background: rgba(24, 14, 26, 0.42);
+	backdrop-filter: blur(6px);
+	-webkit-backdrop-filter: blur(6px);
+	font: inherit;
+	font-size: clamp(12px, 3vmin, 14px);
+	letter-spacing: .06em;
+	cursor: pointer;
+	opacity: 0;
+	transform: translate3d(0, -10px, 0);
+	transition: opacity .5s ease .6s, transform .5s ease .6s, background .2s ease, border-color .2s ease;
+}
+#romanticIntro.is-running .intro-skip {
+	opacity: 1;
+	transform: translate3d(0, 0, 0);
+}
+#romanticIntro .intro-skip:hover,
+#romanticIntro .intro-skip:focus-visible {
+	background: rgba(60, 24, 46, 0.62);
+	border-color: rgba(255, 190, 215, 0.75);
+	outline: none;
+}
+#romanticIntro .intro-skip:focus-visible {
+	outline: 2px solid rgba(255, 190, 215, 0.9);
+	outline-offset: 3px;
+}
+#romanticIntro .intro-skip .intro-skip-arrow {
+	font-size: 1.15em;
+	line-height: 1;
+}
+
+/* Hidden live-region helper */
+#romanticIntro .intro-visually-hidden {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	margin: -1px;
+	padding: 0;
+	overflow: hidden;
+	clip: rect(0 0 0 0);
+	clip-path: inset(50%);
+	border: 0;
+	white-space: nowrap;
+}
+
+/* ============================================================
+   RESPONSIVE COMPOSITION
+   ============================================================ */
+
+/* --- Very small / short landscape phones: tighten vertical rhythm --- */
+@media (max-height: 480px) {
+	#romanticIntro .intro-stage {
+		gap: clamp(6px, 1.6vmin, 12px);
+		padding-block: max(14px, env(safe-area-inset-top)) max(14px, env(safe-area-inset-bottom));
+	}
+	#romanticIntro .intro-heart { width: clamp(58px, 22vh, 110px); height: clamp(58px, 22vh, 110px); }
+	#romanticIntro .intro-title { font-size: clamp(24px, 6.4vh, 44px); }
+	#romanticIntro .intro-subtitle { font-size: clamp(11px, 3.2vh, 14px); }
+	#romanticIntro .intro-eyebrow { font-size: clamp(8px, 2.6vh, 11px); }
+}
+
+/* --- Landscape phones: side-by-side composition, heart left, text right --- */
+@media (orientation: landscape) and (max-height: 560px) and (min-width: 560px) {
+	#romanticIntro .intro-stage {
+	grid-template-columns: auto minmax(0, 1fr);
+	align-items: center;
+	justify-items: start;
+	column-gap: clamp(20px, 5vw, 60px);
+	row-gap: 6px;
+	width: min(100%, 880px);
+		max-width: 880px;
+	text-align: left;
+	}
+	#romanticIntro .intro-heart {
+	grid-row: 1 / span 2;
+	width: clamp(110px, 34vh, 220px);
+	height: clamp(110px, 34vh, 220px);
+	}
+	#romanticIntro .intro-copy { justify-items: start; }
+	#romanticIntro .intro-subtitle { max-width: 46ch; }
+	#romanticIntro .intro-divider { margin-inline-start: 0; }
+	/* Keep the skip pill clear of the composition in landscape */
+	#romanticIntro .intro-skip { top: max(12px, env(safe-area-inset-top)); }
+}
+@keyframes introDividerLeft {
+	to { width: min(70%, 320px); }
+}
+
+/* --- Tablets and small laptops: comfortable, centered, roomier --- */
+@media (min-width: 600px) and (min-height: 600px) {
+	#romanticIntro .intro-stage {
+	width: min(100%, 700px);
+		max-width: 700px;
+		gap: clamp(16px, 2.4vmin, 30px);
+	}
+	#romanticIntro .intro-heart { width: clamp(120px, 24vmin, 200px); height: clamp(120px, 24vmin, 200px); }
+	#romanticIntro .intro-glow { width: min(80vw, 760px); height: min(80vw, 760px); }
+}
+
+/* --- Desktop / large screens: deliberate wide composition, no empty space ---
+   Wider max-width, larger but controlled title ceiling, generous spacing. */
+@media (min-width: 1024px) and (min-height: 640px) {
+	#romanticIntro .intro-stage {
+	width: min(100%, 860px);
+		max-width: 860px;
+		gap: clamp(20px, 2.2vmin, 34px);
+	}
+	#romanticIntro .intro-heart { width: clamp(150px, 20vmin, 230px); height: clamp(150px, 20vmin, 230px); }
+	#romanticIntro .intro-title {
+	/* On desktop we widen the cap so the message reads from a distance,
+		   but still keep a hard ceiling so it never dominates. */
+		font-size: clamp(52px, 5.2vw, 96px);
+	line-height: 1.08;
+	}
+	#romanticIntro .intro-subtitle { font-size: clamp(16px, 1.35vw, 21px); max-width: 52ch; }
+	#romanticIntro .intro-eyebrow { font-size: clamp(12px, .95vw, 15px); }
+	#romanticIntro .intro-glow { width: min(60vw, 900px); height: min(60vw, 900px); }
+	#romanticIntro .intro-skip { min-height: 48px; padding: 12px 22px; font-size: 15px; }
+}
+
+/* --- Ultra-wide / big desktop: keep the focal mass from looking lost --- */
+@media (min-width: 1800px) and (min-height: 900px) {
+	#romanticIntro .intro-stage { width: min(100%, 980px); max-width: 980px; }
+	#romanticIntro .intro-heart { width: clamp(180px, 16vw, 260px); height: clamp(180px, 16vw, 260px); }
+	#romanticIntro .intro-title { font-size: clamp(72px, 4.4vw, 112px); }
+	#romanticIntro .intro-subtitle { font-size: clamp(18px, 1.1vw, 23px); max-width: 56ch; }
+}
+
+/* ============================================================
+   CINEMATIC SCENE ENGINE
+   ------------------------------------------------------------
+   The timeline in intro.js adds .scene-* classes to #romanticIntro
+   over time. Every animation below is keyed on those classes, so
+   the visual sequence is entirely compositor-friendly (transform /
+   opacity / short filter transitions) with no per-frame JS layout.
+   ============================================================ */
+
+/* Parallax wrappers — transform is written by JS each frame. */
+#romanticIntro .intro-parallax {
+	will-change: transform;
+	transform: translate3d(0, 0, 0);
+}
+
+/* --- SCENE 1: DARKNESS / ATMOSPHERE ---
+   The background + vignette start fully dark and ease up very
+   slightly so the eye has to lean in. */
+#romanticIntro .intro-bg,
+#romanticIntro .intro-vignette {
+	opacity: 0;
+	transition: opacity 1.8s ease;
+}
+#romanticIntro.scene-atmosphere .intro-bg { opacity: 1; }
+#romanticIntro.scene-atmosphere .intro-vignette { opacity: .55; }
+#romanticIntro.scene-heart .intro-vignette { opacity: 1; }
+
+/* --- SCENE 2: HEART EMERGENCE ---
+   Heart scales/fades in; halo blooms; a slow elegant heartbeat
+   starts (one beat every ~3.6s with a light secondary throb). */
+#romanticIntro .intro-rays {
+	opacity: 0;
+	transition: opacity 2.2s ease, transform 3.4s ease;
+}
+#romanticIntro.scene-heart .intro-rays {
+	opacity: .5;
+	transform: translate3d(-50%, -50%, 0) scale(1) rotate(8deg);
+	animation: introRaysTurn 46s linear infinite;
+}
+@keyframes introRaysTurn {
+	to { transform: translate3d(-50%, -50%, 0) scale(1) rotate(368deg); }
+}
+
+/* Two-element heart: the OUTER element carries the entrance draw,
+   the INNER svg carries the beat. Keeping them separate means the
+   beat can loop forever without fighting the one-shot entrance, and
+   the JS parallax transform on the wrapper is never overwritten. */
+#romanticIntro .intro-heart svg {
+	transform-origin: 50% 55%;
+	will-change: transform;
+}
+#romanticIntro.scene-heart .intro-heart {
+	animation: introHeartDraw 1.6s cubic-bezier(.2, .7, .2, 1) forwards;
+}
+#romanticIntro.scene-heart .intro-heart svg {
+	animation: introHeartBeat 2.4s ease-in-out 1.4s infinite;
+}
+@keyframes introHeartDraw {
+	0%   { opacity: 0; transform: translate3d(0, 26px, 0) scale(.82); }
+	60%  { opacity: 1; }
+	100% { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+}
+/* A clearly readable, elegant double-beat (lub-dub) then rest. */
+@keyframes introHeartBeat {
+	0%, 100% { transform: scale(1); }
+	9%       { transform: scale(1.085); }
+	18%      { transform: scale(1); }
+	28%      { transform: scale(1.045); }
+	45%      { transform: scale(1); }
+}
+
+#romanticIntro .intro-heart-halo { opacity: 0; }
+#romanticIntro.scene-heart .intro-heart-halo {
+	animation: introHaloBeat 2.4s ease-in-out 1.4s infinite;
+}
+@keyframes introHaloBeat {
+	0%, 100% { opacity: .35; transform: scale(.92); }
+	9%       { opacity: .95; transform: scale(1.12); }
+	28%      { opacity: .5;  transform: scale(1); }
+}
+
+/* Concentric light waves ripple out on each beat (scene 2+). */
+#romanticIntro.scene-heart .intro-ring { animation: introRing 2.4s ease-out 1.6s infinite; }
+#romanticIntro.scene-heart .intro-ring--b { animation-delay: 2.4s; }
+#romanticIntro.scene-heart .intro-ring--c { animation-delay: 3.2s; }
+@keyframes introRing {
+	0%   { transform: scale(.55); opacity: 0; }
+	12%  { opacity: .7; }
+	60%  { opacity: .22; }
+	100% { transform: scale(1.75); opacity: 0; }
+}
+
+/* The ambient field opens gently in scene 1, then breathes. */
+#romanticIntro .intro-glow { opacity: 0; }
+#romanticIntro.scene-atmosphere .intro-glow {
+	animation: introGlowPulse 5.5s ease-in-out infinite;
+}
+#romanticIntro.scene-heart .intro-glow { animation-duration: 3.6s; }
+@keyframes introGlowPulse {
+	0%, 100% { opacity: .32; transform: translate3d(-50%, -50%, 0) scale(.88); }
+	50%      { opacity: .95; transform: translate3d(-50%, -50%, 0) scale(1.14); }
+}
+
+/* --- SCENE 3: PARTICLE GATHERING ---
+   The gathering itself happens in the canvas loop; here the glow
+   tightens slightly so the heart reads as the focal point. */
+#romanticIntro.scene-gather .intro-glow { opacity: .95; }
+
+/* --- SCENE 4: TEXT REVEAL (staggered, blur-to-sharp) --- */
+#romanticIntro.scene-eyebrow .intro-eyebrow {
+	animation: introReveal .95s cubic-bezier(.22, .8, .24, 1) forwards;
+}
+#romanticIntro.scene-line1 .intro-line--1 {
+	animation: introReveal 1.15s cubic-bezier(.22, .8, .24, 1) forwards;
+}
+#romanticIntro.scene-line2 .intro-line--2 {
+	animation: introReveal 1.15s cubic-bezier(.22, .8, .24, 1) forwards;
+}
+@keyframes introReveal {
+	0%   { opacity: 0; transform: translate3d(0, 20px, 0) scale(.985); filter: blur(7px); }
+	55%  { opacity: 1; }
+	100% { opacity: 1; transform: translate3d(0, 0, 0) scale(1); filter: blur(0); }
+}
+
+/* --- SCENE 5: FINAL MESSAGE + SETTLE --- */
+#romanticIntro.scene-final .intro-divider {
+	animation: introDivider 1.3s ease forwards;
+}
+#romanticIntro.scene-final .intro-subtitle {
+	animation: introReveal 1.1s cubic-bezier(.22, .8, .24, 1) .18s forwards;
+}
+@keyframes introDivider {
+	to { width: min(64%, 320px); }
+}
+
+/* Settle: everything comes to rest, glow softens, beat slows. */
+#romanticIntro.scene-settled .intro-heart svg { animation-duration: 3.4s; }
+#romanticIntro.scene-settled .intro-heart-halo { animation-duration: 3.4s; }
+#romanticIntro.scene-settled .intro-ring { animation-duration: 3.4s; }
+#romanticIntro.scene-settled .intro-glow {
+	animation-duration: 9s;
+	opacity: .62;
+}
+#romanticIntro.scene-settled .intro-rays { opacity: .32; }
+
+/* --- SCENE 6: EXIT ---
+   Intensity drops and the layer is cleared by JS adding .is-leaving. */
+#romanticIntro.scene-exit .intro-glow { opacity: .35; transition: opacity 1.6s ease; }
+#romanticIntro.scene-exit .intro-rays { opacity: .12; transition: opacity 1.6s ease; }
+
+/* Landscape divider direction override. */
+@media (orientation: landscape) and (max-height: 560px) and (min-width: 560px) {
+	#romanticIntro.scene-final .intro-divider { animation-name: introDividerLeft; }
+}
+@keyframes introDividerLeft {
+	to { width: min(70%, 320px); }
+}
+
+/* ============================================================
+   REDUCED MOTION — reduced timeline (intro.js skips the scene
+   scheduler and jumps straight to the settled composition).
+   Motion is minimal; message + heart + Skip all remain.
+   ============================================================ */
+@media (prefers-reduced-motion: reduce) {
+	#romanticIntro .intro-glow,
+	#romanticIntro .intro-rays,
+	#romanticIntro .intro-ring { display: none; }
+
+	#romanticIntro .intro-bg { opacity: 1; transition: none; }
+	#romanticIntro .intro-vignette { opacity: 1; transition: none; }
+
+	#romanticIntro .intro-heart,
+	#romanticIntro .intro-heart-halo,
+	#romanticIntro .intro-title .intro-line,
+	#romanticIntro .intro-eyebrow,
+	#romanticIntro .intro-subtitle {
+	opacity: 1;
+	transform: none;
+	filter: none;
+	animation: none !important;
+	}
+	#romanticIntro .intro-heart-halo { opacity: .5; }
+
+	#romanticIntro .intro-divider {
+	width: min(64%, 320px);
+	animation: none !important;
+	}
+
+	#romanticIntro .intro-skip {
+	opacity: 1;
+	transform: none;
+	transition: background .2s ease, border-color .2s ease;
+	}
+
+	#romanticIntro.is-leaving {
+	transition: opacity .35s ease;
+	transform: none;
+	}
+}

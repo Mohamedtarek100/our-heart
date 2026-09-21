@@ -4,9 +4,14 @@ const ACCESS_CODE_HASH =
 const ACCESS_STORAGE_KEY = "ourHeartAccessGrantedAt";
 const ACCESS_DURATION = 24 * 60 * 60 * 1000;
 const ACCESS_VERSION = "4.8";
+const INTRO_VERSION = "4";
 
 const mainApp = document.getElementById("mainApp");
 const userSelector = document.getElementById("userSelector");
+
+// Guards the manual "Love Intro" replay so a second click cannot
+// stack a second overlay or add a second set of listeners.
+let loveIntroReplayActive = false;
 
 function hasValidAccess() {
   const rawTimestamp = localStorage.getItem(ACCESS_STORAGE_KEY);
@@ -27,7 +32,9 @@ function hasValidAccess() {
   return valid;
 }
 
-function showAppShell() {
+async function showAppShell(options = {}) {
+  const { playIntro = false, forceIntro = false } = options;
+
   document.getElementById("accessGate")?.remove();
 
   if (userSelector) {
@@ -39,8 +46,53 @@ function showAppShell() {
       localStorage.getItem("currentUser") ? "block" : "none";
   }
 
+  // Start the chat application immediately so it initializes in
+  // parallel (presence, listeners, sync) and never feels blocked by
+  // the opening animation. The intro overlay is painted on top and
+  // keeps the chat non-interactable until it ends.
   import(`./app.js?v=${ACCESS_VERSION}`);
+
+  if (!playIntro) return;
+
+  try {
+    const introModule = await import(`./intro.js?v=${INTRO_VERSION}`);
+    await introModule.showRomanticIntro({ force: forceIntro });
+  } catch (introError) {
+    // The intro is a non-critical enhancement. If it fails to load,
+    // never block the chat — just log and continue.
+    console.error("Opening animation failed, continuing to chat:", introError);
+  }
 }
+
+/* Manual replay — triggered by the "❤️ Love Intro" button.
+   - Never requires the access code again.
+   - Does not reload the page, change the user, or touch chat state.
+   - Always plays from scene 1 (force: true), reusing the one engine.
+   - Safe if the chat is scrolled, a reply is selected, a reaction
+     picker is open, or fullscreen is active: the overlay simply
+     paints on top and restores interaction on completion/skip. */
+async function replayLoveIntro() {
+  if (loveIntroReplayActive) return;
+  if (document.getElementById("romanticIntro")) return;
+
+  const button = document.getElementById("loveIntroButton");
+  loveIntroReplayActive = true;
+  if (button) button.disabled = true;
+
+  try {
+    const introModule = await import(`./intro.js?v=${INTRO_VERSION}`);
+    await introModule.showRomanticIntro({ force: true });
+  } catch (introError) {
+    console.error("Love Intro replay failed:", introError);
+  } finally {
+    loveIntroReplayActive = false;
+    if (button) button.disabled = false;
+  }
+}
+
+// Exposed for the inline onclick on #loveIntroButton (same pattern as
+// the existing window.changeUser from app.js).
+window.replayLoveIntro = replayLoveIntro;
 
 async function sha256(text) {
   const data = new TextEncoder().encode(text);
@@ -115,7 +167,8 @@ function createAccessGate() {
           String(Date.now())
         );
 
-        showAppShell();
+        // A fresh unlock always plays the cinematic opening.
+        showAppShell({ playIntro: true, forceIntro: true });
         return;
       }
 
@@ -153,7 +206,9 @@ function createAccessGate() {
 }
 
 if (hasValidAccess()) {
-  showAppShell();
+  // Valid session: play the intro only if it has not already been
+  // shown during this authenticated session (intro.js tracks that).
+  showAppShell({ playIntro: true, forceIntro: false });
 } else {
   createAccessGate();
 }

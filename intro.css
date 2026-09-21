@@ -545,34 +545,55 @@
 }
 
 /* ============================================================
-   REDUCED MOTION — reduced timeline (intro.js skips the scene
-   scheduler and jumps straight to the settled composition).
-   Motion is minimal; message + heart + Skip all remain.
+   REDUCED MOTION — STAGED but CALM.
+   ------------------------------------------------------------
+   Accessibility requirement: minimise motion. But we must NOT
+   collapse into the final state instantly — that made the intro
+   look "already settled" (the reported desktop bug). Instead the
+   motion is removed while the SEQUENCE is preserved as a series
+   of gentle opacity cross-fades driven by the same scene classes
+   the normal timeline uses. No transform motion, no particles,
+   no rings, no rays, no parallax — just calm, staged reveals.
    ============================================================ */
 @media (prefers-reduced-motion: reduce) {
+	/* Ambient motion off — static depth only. */
 	#romanticIntro .intro-glow,
 	#romanticIntro .intro-rays,
 	#romanticIntro .intro-ring { display: none; }
 
-	#romanticIntro .intro-bg { opacity: 1; transition: none; }
-	#romanticIntro .intro-vignette { opacity: 1; transition: none; }
-
+	/* Kill every transform-based animation; keep opacity as a slow,
+	   calm fade so the sequence still reads as a progression. */
 	#romanticIntro .intro-heart,
 	#romanticIntro .intro-heart-halo,
 	#romanticIntro .intro-title .intro-line,
 	#romanticIntro .intro-eyebrow,
-	#romanticIntro .intro-subtitle {
-	opacity: 1;
-	transform: none;
-	filter: none;
-	animation: none !important;
-	}
-	#romanticIntro .intro-heart-halo { opacity: .5; }
-
+	#romanticIntro .intro-subtitle,
 	#romanticIntro .intro-divider {
-	width: min(64%, 320px);
 	animation: none !important;
+	filter: none !important;
+	transform: none !important;
+	will-change: opacity;
+	transition: opacity 1.2s ease;
+	opacity: 0;
 	}
+
+	/* Scene progression = calm reveals, one after another. */
+	#romanticIntro .intro-bg { opacity: 0; transition: opacity 1.2s ease; }
+	#romanticIntro .intro-vignette { opacity: 0; transition: opacity 1.2s ease; }
+
+	#romanticIntro.scene-atmosphere .intro-bg { opacity: 1; }
+	#romanticIntro.scene-atmosphere .intro-vignette { opacity: .55; }
+
+	#romanticIntro.scene-heart .intro-vignette { opacity: 1; }
+	#romanticIntro.scene-heart .intro-heart { opacity: 1; }
+	#romanticIntro.scene-heart .intro-heart-halo { opacity: .5; }
+
+	#romanticIntro.scene-eyebrow .intro-eyebrow { opacity: 1; }
+	#romanticIntro.scene-line1 .intro-line--1 { opacity: 1; }
+	#romanticIntro.scene-line2 .intro-line--2 { opacity: 1; }
+
+	#romanticIntro.scene-final .intro-divider { width: min(64%, 320px); }
+	#romanticIntro.scene-final .intro-subtitle { opacity: 1; }
 
 	#romanticIntro .intro-skip {
 	opacity: 1;

@@ -26,7 +26,7 @@
    ============================================================ */
 
 const INTRO_STYLESHEET_ID = "romanticIntroStyles";
-const INTRO_STYLESHEET_HREF = "intro.css?v=5";
+const INTRO_STYLESHEET_HREF = "intro.css?v=6";
 
 /* Timeline (ms from scene-1 start). Total ~21s — under the 30s
    ceiling, and never padded with dead time. */
@@ -380,9 +380,32 @@ export function showRomanticIntro(options = {}) {
 
     function scheduleScenes() {
       if (reduced) {
-        // Reduced motion: show the final calm composition immediately.
-        root.classList.add("is-running", "scene-heart", "scene-final", "scene-settled");
+        // Reduced motion: STAGED but calm. We keep the same scene
+        // progression (so the intro never appears already-settled),
+        // just with slower, gentle opacity fades and no motion. The
+        // CSS reduced-motion block turns each scene class into a plain
+        // cross-fade instead of a transform animation.
+        root.classList.add("is-running");
         running = true;
+
+        const addReduced = (cls, at) => {
+          sceneTimers.push(
+            setTimeout(() => {
+              if (finished) return;
+              root.classList.add(cls);
+            }, at)
+          );
+        };
+
+        addReduced("scene-atmosphere", TIMELINE.atmosphere);
+        addReduced("scene-heart", 1200);
+        addReduced("scene-gather", 3200);
+        addReduced("scene-eyebrow", 4800);
+        addReduced("scene-line1", 6200);
+        addReduced("scene-line2", 7600);
+        addReduced("scene-final", 9200);
+        addReduced("scene-settled", 11500);
+        addReduced("scene-exit", 14500);
         return;
       }
 

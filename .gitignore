@@ -50,3 +50,14 @@ __queuestorage__
 __tablestorage__/
 __azurite_db*__.json
 AzuriteConfig
+
+# Temporary QA / debug artifacts (must never be committed — they may embed
+# credentials while probing the live backend)
+_qa-*
+_qa_*
+.qa-*
+.tmp-*
+*.qa.js
+*.qa.mjs
+.qa/
+qa-tmp/

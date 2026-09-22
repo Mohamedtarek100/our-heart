@@ -26,9 +26,9 @@
 
 const API_BASE = "https://ourheartfunctions2026.azurewebsites.net/api";
 
-const ACCESS_VERSION = "5.2";
+const ACCESS_VERSION = "5.3";
 const INTRO_VERSION = "7";
-const LOCK_VERSION = "4";
+const LOCK_VERSION = "5";
 
 /* Set to true only for a brand-new successful login; consumed once so a
    trusted page reload never autoplays the Intro. */

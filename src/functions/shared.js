@@ -446,6 +446,8 @@ function clearSessionCookie(request) {
 const DEFAULT_ALLOWED_ORIGINS = [
   // Production frontend / API host.
   "https://ourheartfunctions2026.azurewebsites.net",
+  // Production frontend on GitHub Pages (the real live site).
+  "https://mohamedtarek100.github.io",
   // Local static-server origins commonly used while developing
   // (Live Server / VS Code / http-server).
   "http://127.0.0.1:5500",

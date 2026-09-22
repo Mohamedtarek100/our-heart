@@ -127,24 +127,45 @@ let countdownTimer = 0;
 let lastRendered = { months: null, days: null, hours: null, minutes: null, seconds: null };
 
 /* Remaining time to the absolute server deadline, split into FIVE units.
-   "Months" uses whole 30-day months and the leftover days are shown in
-   their own DAYS cell, so the display always ticks down monotonically and
-   never drifts. Everything is DERIVED from the deadline each tick — no
-   naive per-second decrementing. */
+
+   MONTHS are CALENDAR months (not a fixed 30-day block): we walk forward
+   month-by-month from "now" while the deadline is still reachable, then the
+   remainder in days/hours/minutes/seconds is derived from the exact
+   millisecond difference. Everything is DERIVED from the deadline on every
+   tick, so a changed device clock cannot shift it and it cannot drift.
+
+   The result is monotonic decreasing: each month step consumes a real
+   calendar month, and the leftover days are always < the length of the
+   next calendar month. */
 function computeRemaining(deadline, now) {
   let diff = deadline - now;
   if (!Number.isFinite(diff) || diff < 0) diff = 0;
 
-  const totalSeconds = Math.floor(diff / 1000);
+  // Count whole calendar months between now and the deadline.
+  let months = 0;
+  const cursor = new Date(now);
+  while (true) {
+    const next = new Date(cursor);
+    next.setMonth(next.getMonth() + 1); // calendar-aware (handles 28/30/31)
+    if (next.getTime() <= deadline) {
+      months += 1;
+      cursor.setTime(next.getTime());
+      // Safety bound: the deadline is ~2027; never loop indefinitely.
+      if (months > 600) break;
+    } else {
+      break;
+    }
+  }
+
+  // Exact remainder after the whole months were consumed.
+  const remainderMs = Math.max(0, deadline - cursor.getTime());
+  const totalSeconds = Math.floor(remainderMs / 1000);
   const seconds = totalSeconds % 60;
   const totalMinutes = Math.floor(totalSeconds / 60);
   const minutes = totalMinutes % 60;
   const totalHours = Math.floor(totalMinutes / 60);
   const hours = totalHours % 24;
-  const totalDays = Math.floor(totalHours / 24);
-
-  const months = Math.floor(totalDays / 30);
-  const days = totalDays % 30;
+  const days = Math.floor(totalHours / 24);
 
   return { months, days, hours, minutes, seconds };
 }
@@ -590,8 +611,44 @@ function buildShell() {
      anchored in the composition.
    - Ownership text ("سؤالك اليوم") comes from the SERVER-provided prompt;
      the client never decides ownership. */
+/* Renders a deliberate section state (loading / error / empty) with an
+   optional Retry action. Used so no section is ever a silent blank hole.
+   The retry re-fetches over the EXISTING session — it never reloads the
+   page and never fabricates content. */
+function renderSectionState(container, kind, message, onRetry) {
+  if (!container) return;
+  container.replaceChildren();
+
+  const wrap = document.createElement("div");
+  wrap.className = `lock-state lock-state--${kind}`;
+
+  if (kind === "loading") {
+    wrap.innerHTML = `
+      <span class="lock-state-spinner" aria-hidden="true"></span>
+      <span class="lock-state-text">${escapeHtml(message)}</span>
+    `;
+  } else {
+    wrap.innerHTML = `<span class="lock-state-text">${escapeHtml(message)}</span>`;
+    if (typeof onRetry === "function") {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "lock-state-retry";
+      btn.textContent = "حاولي تاني";
+      btn.addEventListener("click", onRetry);
+      wrap.appendChild(btn);
+    }
+  }
+
+  container.appendChild(wrap);
+}
+
+/* Structured, non-sensitive diagnostics (no tokens, no cookies, no codes). */
+function logApiIssue(code, detail) {
+  console.warn(`[Our Heart] ${code}`, detail || "");
+}
+
 function renderQuestions(root, today, onAnswered, options = {}) {
-  const { failed = false } = options;
+  const { failed = false, errorCode = "QUESTION_UNAVAILABLE" } = options;
   const container = root.querySelector(".lock-questions");
   if (!container) return;
 
@@ -599,17 +656,22 @@ function renderQuestions(root, today, onAnswered, options = {}) {
   // refresh is in flight (that would discard its confirmed state).
   if (options.skipQuestionRender) return;
 
-  container.replaceChildren();
-
   if (!today || !today.myQuestion || !Array.isArray(today.myQuestion.options)) {
-    const notice = document.createElement("p");
-    notice.className = "lock-questions-empty";
-    notice.textContent = failed
-      ? "تعذّر تحميل سؤال اليوم دلوقتي. حاولي تحدّثي الصفحة."
-      : "لسه مفيش سؤال متاح ليكي النهاردة.";
-    container.appendChild(notice);
+    if (failed) {
+      logApiIssue(errorCode);
+      renderSectionState(
+        container,
+        "error",
+        "تعذر تحميل سؤال اليوم. تأكدي من الاتصال وحاولي تاني.",
+        () => refreshToday(root).then(() => root._refreshJourney?.())
+      );
+    } else {
+      renderSectionState(container, "empty", "لسه مفيش سؤال متاح ليكي النهاردة.");
+    }
     return;
   }
+
+  container.replaceChildren();
 
   const mine = today.myQuestion;
   const myAnswer = today.myAnswer || { answered: false };
@@ -781,14 +843,16 @@ function renderPresenceStatus(summary) {
 function renderTodayStatus(root, today) {
   const container = root.querySelector(".lock-today");
   if (!container) return;
-  container.replaceChildren();
   if (!today) {
-    const notice = document.createElement("p");
-    notice.className = "lock-questions-empty";
-    notice.textContent = "تعذر تحميل حالة اليوم، حاولي تحدّثي الصفحة.";
-    container.appendChild(notice);
+    renderSectionState(
+      container,
+      "error",
+      "تعذر تحميل حالة اليوم. حاولي تاني.",
+      () => refreshToday(root, { skipQuestionRender: true })
+    );
     return;
   }
+  container.replaceChildren();
 
   const myAnswer = today.myAnswer || { answered: false };
   const partnerAnswer = today.partner || { answered: false };
@@ -1089,11 +1153,13 @@ async function refreshToday(root, options = {}) {
     renderTodayStatus(root, today);
     return today;
   } catch (error) {
-    console.error("Failed to refresh today:", error);
-    // Surface an explicit, styled state instead of a silent empty section.
+    // Capture the exact status so the failure is never hidden.
+    const status = Number((/->\s*(\d{3})/.exec(error?.message || "") || [])[1]) || 0;
+    logApiIssue("TODAY_FETCH_FAILED", { status });
     if (!skipQuestionRender) {
-      renderQuestions(root, null, null, { failed: true });
+      renderQuestions(root, null, null, { failed: true, errorCode: `TODAY_FETCH_${status || "FAILED"}` });
     }
+    renderTodayStatus(root, null);
     return null;
   }
 }
@@ -1199,21 +1265,29 @@ function markTodayComplete(root) {
 }
 
 async function loadJourney(root) {
+  const container = root.querySelector(".lock-months");
   try {
     const journey = await apiGet("/relationship/journey");
     renderProgress(root, journey.progress);
     renderJourney(root, journey, (date, trigger) => openDay(root, date, trigger));
   } catch (error) {
-    console.error("Failed to load journey:", error);
-    // Never leave a silent blank section — show a deliberate state.
-    const container = root.querySelector(".lock-months");
+    const status = Number((/->\s*(\d{3})/.exec(error?.message || "") || [])[1]) || 0;
+    logApiIssue("JOURNEY_FETCH_FAILED", { status });
+    // Never leave a silent blank section — show a deliberate state + retry.
     if (container && container.childElementCount === 0) {
-      const notice = document.createElement("p");
-      notice.className = "lock-questions-empty";
-      notice.textContent = "تعذر تحميل رحلة الأيام، حاولي تحدّثي الصفحة.";
-      container.appendChild(notice);
+      renderSectionState(
+        container,
+        "error",
+        "تعذر تحميل رحلة الأيام. تأكدي من الاتصال وحاولي تاني.",
+        () => loadJourney(root)
+      );
     }
   }
+}
+
+// Allow the Today retry to also refresh the journey without a page reload.
+function wireJourneyRetry(root) {
+  root._refreshJourney = () => loadJourney(root);
 }
 
 async function openDay(root, date, triggerEl) {
@@ -1278,6 +1352,14 @@ export async function mountRelationshipLock(mountEl, options = {}) {
   setTimeout(() => root.querySelector(".lock-countdown-section")?.classList.add("is-shown"), phraseEnd + (reduced ? 120 : 420));
 
   root.classList.add("is-ready");
+
+  wireJourneyRetry(root);
+
+  // Show deliberate loading states first so the sections are never blank
+  // while the real data is in flight.
+  renderSectionState(root.querySelector(".lock-questions"), "loading", "بنحمّل سؤال اليوم…");
+  renderSectionState(root.querySelector(".lock-months"), "loading", "بنحمّل رحلة الأيام…");
+  renderSectionState(root.querySelector(".lock-today"), "loading", "بنحمّل حالة اليوم…");
 
   // Load live, server-authoritative data. refreshToday renders the question
   // and today's status; loadJourney renders the journey + progress. The

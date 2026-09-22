@@ -71,6 +71,7 @@ app.http("deleteChat", {
 
       return {
         status: 200,
+        headers: corsHeaders(request),
         jsonBody: {
           success: true,
           messageId

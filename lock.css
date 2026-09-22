@@ -666,8 +666,9 @@
 	animation: lockTick .55s var(--lock-ease);
 }
 @keyframes lockTick {
-	0%   { transform: translateY(-6px); opacity: .35; }
-	100% { transform: translateY(0); opacity: 1; }
+	0%   { transform: translateY(-3px) scale(.94); opacity: .3; filter: blur(3px); }
+	60%  { opacity: 1; filter: blur(0); }
+	100% { transform: translateY(0) scale(1); opacity: 1; filter: blur(0); }
 }
 #relationshipLock .lock-count-label {
 	position: relative;
@@ -860,6 +861,62 @@
 	line-height: 1.9;
 	text-align: center;
 }
+
+/* --- Deliberate section states (loading / empty / error) + Retry --- */
+#relationshipLock .lock-state {
+	display: grid;
+	justify-items: center;
+	gap: 14px;
+	padding: clamp(22px, 5vw, 32px);
+	border: 1px solid var(--lock-line);
+	border-radius: var(--lock-radius);
+	background: linear-gradient(180deg, rgba(28, 18, 32, .5), rgba(14, 10, 20, .42));
+	text-align: center;
+}
+#relationshipLock .lock-state--error { border-color: rgba(255, 140, 170, .34); }
+#relationshipLock .lock-state--empty { border-style: dashed; opacity: .9; }
+#relationshipLock .lock-state-text {
+	margin: 0;
+	font-size: clamp(13px, 3.6vw, 15px);
+	line-height: 1.9;
+	color: var(--lock-muted);
+}
+#relationshipLock .lock-state--error .lock-state-text { color: #ffd6e2; }
+
+/* Polished loading indicator (opacity/transform only). */
+#relationshipLock .lock-state-spinner {
+	width: 30px;
+	height: 30px;
+	border-radius: 50%;
+	border: 2px solid rgba(255, 160, 195, .22);
+	border-top-color: var(--lock-rose);
+	animation: lockSpin .9s linear infinite;
+}
+@keyframes lockSpin {
+	to { transform: rotate(360deg); }
+}
+
+#relationshipLock .lock-state-retry {
+	min-height: 40px;
+	padding: 9px 20px;
+	border: 1px solid rgba(255, 170, 200, .45);
+	border-radius: 999px;
+	color: var(--lock-ink);
+	background: linear-gradient(135deg, rgba(255, 122, 169, .18), rgba(185, 140, 255, .12));
+	font: inherit;
+	font-size: clamp(12px, 3.4vw, 14px);
+	font-weight: 600;
+	cursor: pointer;
+	transition: transform .18s var(--lock-ease), border-color .18s ease, background .18s ease;
+}
+#relationshipLock .lock-state-retry:hover,
+#relationshipLock .lock-state-retry:focus-visible {
+	border-color: rgba(255, 190, 215, .8);
+	background: linear-gradient(135deg, rgba(255, 122, 169, .28), rgba(185, 140, 255, .18));
+	transform: translateY(-1px);
+	outline: none;
+}
+#relationshipLock .lock-state-retry:active { transform: translateY(1px) scale(.98); }
 
 /* Staggered entrance for the two answer options. */
 #relationshipLock .lock-option {
@@ -1302,4 +1359,5 @@
 	#relationshipLock .lock-count-cell::after { display: none; }
 	#relationshipLock .lock-option { animation: none !important; opacity: 1 !important; transform: none !important; }
 	#relationshipLock .lock-note-sparkle { animation: none !important; }
+	#relationshipLock .lock-state-spinner { animation: none !important; opacity: .7; }
 }

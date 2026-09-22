@@ -2,7 +2,8 @@ const { app } = require("@azure/functions");
 const {
   container,
   requireSessionAndUnlocked,
-  serverError
+  serverError,
+  corsHeaders
 } = require("./shared");
 
 // GET: آخر 60 رسالة
@@ -36,6 +37,7 @@ app.http("getChat", {
 
       return {
         status: 200,
+        headers: corsHeaders(request),
         jsonBody: resources
       };
 
@@ -109,6 +111,7 @@ app.http("getNewMessages", {
 
       return {
         status: 200,
+        headers: corsHeaders(request),
         jsonBody: resources
       };
     } catch (error) {
@@ -197,6 +200,7 @@ app.http("sendChat", {
 
       return {
         status: 201,
+        headers: corsHeaders(request),
         jsonBody: {
           success: true,
           message: item
@@ -250,6 +254,7 @@ app.http("markSeen", {
 
       return {
         status: 200,
+        headers: corsHeaders(request),
         jsonBody: {
           success: true,
           messageIds,

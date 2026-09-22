@@ -53,6 +53,7 @@ app.http("setPresence", {
 
       return {
         status: 200,
+        headers: corsHeaders(request),
         jsonBody: {
           success: true,
           presence: describePresence(gate.user, item),
@@ -127,6 +128,7 @@ app.http("setTyping", {
 
       return {
         status: 200,
+        headers: corsHeaders(request),
         jsonBody: {
           success: true,
           typing: item
@@ -177,6 +179,7 @@ app.http("setStatus", {
 
       return {
         status: 200,
+        headers: corsHeaders(request),
         jsonBody: {
           success: true,
           status: item
@@ -248,6 +251,7 @@ app.http("getPresence", {
 
       return {
         status: 200,
+        headers: corsHeaders(request),
         jsonBody: {
           success: true,
           presence,
@@ -308,6 +312,7 @@ app.http("reactMessage", {
 
       return {
         status: 200,
+        headers: corsHeaders(request),
         jsonBody: {
           success: true,
           message: updated

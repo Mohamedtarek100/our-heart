@@ -1,79 +1,184 @@
-const ACCESS_CODE_HASH =
-  "4a1c33367c51b50488ef25a30719ee7d5a2781cb7b67ccdcc06d49e6be844e67";
+/* ============================================================
+   Our Heart — Frontend auth / session / lock orchestrator
+   ------------------------------------------------------------
+   Replaces the old client-side Access Code + localStorage trust
+   mechanism entirely. This file contains:
+     - NO access code
+     - NO access-code hash
+     - NO client-side proof of authentication
+     - NO localStorage/sessionStorage "authenticated" flag
 
-const ACCESS_STORAGE_KEY = "ourHeartAccessGrantedAt";
-const ACCESS_DURATION = 24 * 60 * 60 * 1000;
-const ACCESS_VERSION = "4.8";
-const INTRO_VERSION = "6";
+   Trust is decided ONLY by the backend:
+     POST /api/login     (verify code -> trusted HttpOnly session)
+     POST /api/logout    (revoke session + clear cookie)
+     GET  /api/session   (report trust + lock state)
 
-const mainApp = document.getElementById("mainApp");
-const userSelector = document.getElementById("userSelector");
+   State machine:
+     checking-session -> authenticating -> trusted
+                                         -> locked | chat
+                     -> unauthenticated (Access Gate)
+                     -> logging-out
 
-// Guards the manual "Love Intro" replay so a second click cannot
-// stack a second overlay or add a second set of listeners.
-let loveIntroReplayActive = false;
+   Everything FAILS CLOSED: any error, timeout or unreadable
+   response leaves the visitor UNTRUSTED and the application
+   unmounted.
+   ============================================================ */
 
-function hasValidAccess() {
-  const rawTimestamp = localStorage.getItem(ACCESS_STORAGE_KEY);
-  const timestamp = Number(rawTimestamp);
+const API_BASE = "https://ourheartfunctions2026.azurewebsites.net/api";
 
-  if (!Number.isSafeInteger(timestamp) || timestamp <= 0) {
-    localStorage.removeItem(ACCESS_STORAGE_KEY);
+const ACCESS_VERSION = "5.1";
+const INTRO_VERSION = "7";
+const LOCK_VERSION = "3";
+
+/* Set to true only for a brand-new successful login; consumed once so a
+   trusted page reload never autoplays the Intro. */
+const INTRO_NEW_AUTH_KEY = "ourHeartNewAuth";
+
+/* ------------------------------------------------------------------ */
+/* DOM helpers                                                         */
+/* ------------------------------------------------------------------ */
+
+const appRoot = document.getElementById("appRoot");
+const bootState = document.getElementById("bootState");
+const accessGateMount = document.getElementById("accessGateMount");
+const lockMount = document.getElementById("lockMount");
+const appMount = document.getElementById("appMount");
+
+let currentState = "checking-session";
+
+function setState(next) {
+  currentState = next;
+  if (appRoot) appRoot.dataset.authState = next;
+}
+
+function showBoot(show) {
+  if (bootState) bootState.hidden = !show;
+  if (show) {
+    document.body.classList.add("is-checking");
+  } else {
+    document.body.classList.remove("is-checking");
+  }
+}
+
+/* Removes the checking shell entirely so it can never sit on top of the
+   trusted experience (belt and braces alongside `hidden`). */
+function destroyBoot() {
+  showBoot(false);
+  bootState?.remove();
+}
+
+function prefersReducedMotion() {
+  return (
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  );
+}
+
+/* Minimal HTML escaper for any value interpolated into the gate markup. */
+function escapeHtml(value) {
+  return String(value == null ? "" : value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+/* Wipes every mounted surface + any non-sensitive local app state.
+   Used on logout / change account / failed trust so no authenticated
+   DOM survives. */
+function unmountAll() {
+  if (lockMount) lockMount.replaceChildren();
+  if (appMount) appMount.replaceChildren();
+  document.querySelectorAll("#romanticIntro").forEach((node) => node.remove());
+}
+
+/* ------------------------------------------------------------------ */
+/* Backend calls                                                       */
+/* ------------------------------------------------------------------ */
+
+async function fetchSession() {
+  const response = await fetch(`${API_BASE}/session`, {
+    method: "GET",
+    credentials: "include",
+    cache: "no-store"
+  });
+  if (!response.ok) throw new Error(`session ${response.status}`);
+  return response.json();
+}
+
+async function postVerifyCode(code) {
+  const response = await fetch(`${API_BASE}/verify-code`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ code })
+  });
+  const payload = await response.json().catch(() => ({}));
+  return { ok: response.ok, status: response.status, payload };
+}
+
+async function postLogin(provisional, user, code) {
+  const body = provisional ? { provisional, user } : { code, user };
+  const response = await fetch(`${API_BASE}/login`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body)
+  });
+  const payload = await response.json().catch(() => ({}));
+  return { ok: response.ok, status: response.status, payload };
+}
+
+async function postLogout() {
+  try {
+    await fetch(`${API_BASE}/logout`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" }
+    });
+  } catch (error) {
+    console.error("Logout request failed:", error);
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Intro trigger                                                       */
+/* ------------------------------------------------------------------ */
+
+function markNewAuth() {
+  try { sessionStorage.setItem(INTRO_NEW_AUTH_KEY, "1"); } catch { }
+}
+
+function consumeNewAuth() {
+  try {
+    const flag = sessionStorage.getItem(INTRO_NEW_AUTH_KEY) === "1";
+    sessionStorage.removeItem(INTRO_NEW_AUTH_KEY);
+    return flag;
+  } catch {
     return false;
   }
-
-  const age = Date.now() - timestamp;
-  const valid = age >= 0 && age < ACCESS_DURATION;
-
-  if (!valid) {
-    localStorage.removeItem(ACCESS_STORAGE_KEY);
-  }
-
-  return valid;
 }
 
-async function showAppShell(options = {}) {
-  const { playIntro = false, forceIntro = false } = options;
-
-  document.getElementById("accessGate")?.remove();
-
-  if (userSelector) {
-    userSelector.style.display = "block";
-  }
-
-  if (mainApp) {
-    mainApp.style.display =
-      localStorage.getItem("currentUser") ? "block" : "none";
-  }
-
-  // Start the chat application immediately so it initializes in
-  // parallel (presence, listeners, sync) and never feels blocked by
-  // the opening animation. The intro overlay is painted on top and
-  // keeps the chat non-interactable until it ends.
-  import(`./app.js?v=${ACCESS_VERSION}`);
-
-  if (!playIntro) return;
-
+/* Plays the cinematic Intro. `force` is true for a fresh login, false for
+   a trusted reload (where intro.js's own session guard already prevents a
+   replay — we also never force it in that case). */
+async function playIntro(force) {
   try {
     const introModule = await import(`./intro.js?v=${INTRO_VERSION}`);
-    await introModule.showRomanticIntro({ force: forceIntro });
+    await introModule.showRomanticIntro({ force });
   } catch (introError) {
-    // The intro is a non-critical enhancement. If it fails to load,
-    // never block the chat — just log and continue.
-    console.error("Opening animation failed, continuing to chat:", introError);
+    console.error("Opening animation failed, continuing:", introError);
   }
 }
 
-/* Manual replay — triggered by the "❤️ Love Intro" button.
-   - Never requires the access code again.
-   - Does not reload the page, change the user, or touch chat state.
-   - Always plays from scene 1 (force: true), reusing the one engine.
-   - Safe if the chat is scrolled, a reply is selected, a reaction
-     picker is open, or fullscreen is active: the overlay simply
-     paints on top and restores interaction on completion/skip. */
+/* Manual replay — only reachable from the footer control, which itself is
+   only mounted after trust. */
+let loveIntroReplayActive = false;
 async function replayLoveIntro() {
   if (loveIntroReplayActive) return;
   if (document.getElementById("romanticIntro")) return;
+  if (currentState !== "trusted" && currentState !== "locked") return;
 
   const button = document.getElementById("loveIntroButton");
   loveIntroReplayActive = true;
@@ -89,37 +194,55 @@ async function replayLoveIntro() {
     if (button) button.disabled = false;
   }
 }
-
-// Exposed for the inline onclick on #loveIntroButton (same pattern as
-// the existing window.changeUser from app.js).
 window.replayLoveIntro = replayLoveIntro;
 
-async function sha256(text) {
-  const data = new TextEncoder().encode(text);
-  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+/* ------------------------------------------------------------------ */
+/* Authenticated app mount                                             */
+/* ------------------------------------------------------------------ */
 
-  return [...new Uint8Array(hashBuffer)]
-    .map(byte => byte.toString(16).padStart(2, "0"))
-    .join("");
+let appModuleLoaded = false;
+
+function mountAppShell(state) {
+  if (!appMount) return;
+
+  // Clone the template so the authenticated DOM is only created now.
+  const template = document.getElementById("tplAppShell");
+  if (template && appMount.childElementCount === 0) {
+    appMount.appendChild(template.content.cloneNode(true));
+  }
+
+  // The trusted identity is handed to app.js from the SERVER session —
+  // never from localStorage.
+  if (state && state.user) {
+    window.__OUR_HEART_USER = state.user;
+  }
+
+  // Start the existing chat application exactly once. app.js retains ALL
+  // its original logic (messages, voice, sync, presence, reactions,
+  // replies, media, delete, fullscreen) — we only gate WHEN it loads.
+  if (!appModuleLoaded) {
+    appModuleLoaded = true;
+    import(`./app.js?v=${ACCESS_VERSION}`);
+  }
 }
 
-function createAccessGate() {
-  userSelector.style.display = "none";
-  mainApp.style.display = "none";
+/* ------------------------------------------------------------------ */
+/* STAGE 1 — Access Gate (Access Code ONLY)                            */
+/* ------------------------------------------------------------------ */
+
+/* Before the Access Code is verified the ONLY thing mounted is this gate:
+   a heart, the private-space line, the code input and the Enter button.
+   No account names, no Love Intro, no Change Account, no chat. */
+function mountAccessGate() {
+  if (!accessGateMount || accessGateMount.childElementCount > 0) return;
 
   const gate = document.createElement("div");
-
   gate.id = "accessGate";
-
   gate.innerHTML = `
     <div class="accessCard">
       <div class="accessHeart">❤️</div>
-
       <h1>Our Heart</h1>
-
-      <p class="accessSubtitle">
-        This is a private space.
-      </p>
+      <p class="accessSubtitle">This is a private space.</p>
 
       <div class="accessInputWrap">
         <input
@@ -132,9 +255,7 @@ function createAccessGate() {
         >
       </div>
 
-      <button id="accessSubmit" type="button">
-        Enter ❤️
-      </button>
+      <button id="accessSubmit" type="button">Enter ❤️</button>
 
       <p id="accessError" class="accessError" aria-live="polite" hidden>
         Incorrect access code.
@@ -142,73 +263,332 @@ function createAccessGate() {
     </div>
   `;
 
-  document.body.appendChild(gate);
+  accessGateMount.appendChild(gate);
 
-  const input = document.getElementById("accessCodeInput");
-  const button = document.getElementById("accessSubmit");
-  const error = document.getElementById("accessError");
+  const input = gate.querySelector("#accessCodeInput");
+  const button = gate.querySelector("#accessSubmit");
+  const error = gate.querySelector("#accessError");
+
+  let submitting = false;
 
   async function submitCode() {
-    if (button.disabled) return;
+    if (submitting) return;
     const code = input.value.trim();
-
     if (!code) return;
 
+    submitting = true;
     button.disabled = true;
     button.classList.add("is-loading");
     error.hidden = true;
+    setState("authenticating");
 
     try {
-      const hash = await sha256(code);
+      // STAGE 1: verify the code server-side and obtain a short-lived
+      // provisional token. NO session is created yet and NO account has
+      // been chosen.
+      const { ok, status, payload } = await postVerifyCode(code);
 
-      if (hash === ACCESS_CODE_HASH) {
-        localStorage.setItem(
-          ACCESS_STORAGE_KEY,
-          String(Date.now())
-        );
-
-        // A fresh unlock always plays the cinematic opening.
-        showAppShell({ playIntro: true, forceIntro: true });
+      if (ok && payload && payload.codeVerified && payload.provisional) {
+        // Code is valid -> reveal the account-selection stage.
+        button.disabled = false;
+        button.classList.remove("is-loading");
+        submitting = false;
+        await goToAccountSelection(payload.provisional, payload.provisionalExpiresAt, payload.presence);
         return;
       }
 
-      error.textContent = "Incorrect access code.";
+      // Failure: remain untrusted, Access Gate stays (no account selector).
+      setState("unauthenticated");
+      error.textContent =
+        status === 429
+          ? "Too many attempts. Please wait a moment and try again."
+          : "Incorrect access code.";
       error.hidden = false;
       input.value = "";
       input.focus();
 
-      gate
-        .querySelector(".accessCard")
-        ?.classList.remove("access-shake");
-
+      gate.querySelector(".accessCard")?.classList.remove("access-shake");
       requestAnimationFrame(() => {
-        gate
-          .querySelector(".accessCard")
-          ?.classList.add("access-shake");
+        gate.querySelector(".accessCard")?.classList.add("access-shake");
       });
     } catch (submitError) {
       console.error("Access verification failed:", submitError);
+      // FAIL CLOSED.
+      setState("unauthenticated");
       error.textContent = "Unable to verify access. Try again.";
       error.hidden = false;
     } finally {
+      submitting = false;
       button.disabled = false;
       button.classList.remove("is-loading");
     }
   }
 
   button.addEventListener("click", submitCode);
-
   input.addEventListener("keydown", (event) => {
-    if (event.key === "Enter") {
-      submitCode();
-    }
+    if (event.key === "Enter") submitCode();
   });
 }
 
-if (hasValidAccess()) {
-  // Valid session: play the intro only if it has not already been
-  // shown during this authenticated session (intro.js tracks that).
-  showAppShell({ playIntro: true, forceIntro: false });
-} else {
-  createAccessGate();
+function unmountAccessGate() {
+  if (accessGateMount) accessGateMount.replaceChildren();
 }
+
+/* ------------------------------------------------------------------ */
+/* STAGE 2 — Account Selection (only after the code is verified)       */
+/* ------------------------------------------------------------------ */
+
+/* Holds the provisional token in MEMORY ONLY for the lifetime of the
+   selection step. It is never written to localStorage or any cookie the
+   page can read. */
+let pendingProvisional = null;
+let pendingProvisionalExpiresAt = 0;
+let pendingPresence = null;
+
+/* Formats a presence summary entry into a WhatsApp-like status line.
+   Real server data only — never fabricated on the client. */
+function formatPresence(entry) {
+  if (!entry) return { text: "", online: false };
+
+  const ONLINE_WINDOW_MS = 45 * 1000;
+  const lastSeen = Number(entry.lastSeen) || 0;
+  const isFresh = lastSeen > 0 && (Date.now() - lastSeen) < ONLINE_WINDOW_MS;
+
+  if (entry.online && isFresh) return { text: "Online", online: true };
+
+  if (lastSeen > 0) {
+    const time = new Date(lastSeen).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    return { text: `Last seen today at ${time}`, online: false };
+  }
+
+  return { text: "Offline", online: false };
+}
+
+async function goToAccountSelection(provisional, expiresAt, presence) {
+  setState("account-selection");
+  pendingProvisional = provisional;
+  pendingProvisionalExpiresAt = Number(expiresAt) || 0;
+  pendingPresence = presence || null;
+
+  // Elegant exit of stage 1, then reveal stage 2.
+  const gate = accessGateMount?.querySelector("#accessGate");
+  if (gate) {
+    gate.classList.add("is-leaving");
+    await new Promise((resolve) => setTimeout(resolve, prefersReducedMotion() ? 60 : 420));
+  }
+  unmountAccessGate();
+
+  mountAccountSelection();
+}
+
+function mountAccountSelection() {
+  if (!accessGateMount || accessGateMount.childElementCount > 0) return;
+
+  const mohamedStatus = formatPresence(pendingPresence?.Mohamed);
+  const yomnaStatus = formatPresence(pendingPresence?.Yomna);
+
+  const wrap = document.createElement("div");
+  wrap.id = "accountSelection";
+  wrap.innerHTML = `
+    <div class="accessCard accountCard">
+      <div class="accessHeart">❤️</div>
+      <h1>مين اللي بيكلمني؟</h1>
+      <p class="accessSubtitle">اختر حسابك لتكمّل</p>
+
+      <div class="accountOptions" role="radiogroup" aria-label="Choose your account">
+        <button type="button" class="accountOption" data-user="Mohamed" role="radio" aria-checked="false">
+          <span class="accountOptionAvatar" aria-hidden="true">❤️</span>
+          <span class="accountOptionName">Mohamed</span>
+          <span class="accountOptionStatus ${mohamedStatus.online ? "is-online" : ""}">${escapeHtml(mohamedStatus.text)}</span>
+        </button>
+        <button type="button" class="accountOption" data-user="Yomna" role="radio" aria-checked="false">
+          <span class="accountOptionAvatar" aria-hidden="true">❤️</span>
+          <span class="accountOptionName">Yomna</span>
+          <span class="accountOptionStatus ${yomnaStatus.online ? "is-online" : ""}">${escapeHtml(yomnaStatus.text)}</span>
+        </button>
+      </div>
+
+      <p id="accountStatus" class="accessError" aria-live="polite" hidden></p>
+    </div>
+  `;
+
+  accessGateMount.appendChild(wrap);
+
+  const status = wrap.querySelector("#accountStatus");
+  const options = [...wrap.querySelectorAll(".accountOption")];
+  let submitting = false;
+
+  async function chooseAccount(user, button) {
+    if (submitting) return;
+
+    // Provisional must still be usable; if it lapsed, fall back to stage 1.
+    if (!pendingProvisional ||
+        (pendingProvisionalExpiresAt && Date.now() > pendingProvisionalExpiresAt)) {
+      resetToAccessGate("انتهت صلاحية التحقق. أدخل الكود مرة أخرى.");
+      return;
+    }
+
+    submitting = true;
+    options.forEach((option) => { option.disabled = true; });
+    button.classList.add("is-selected");
+    button.setAttribute("aria-checked", "true");
+    status.textContent = "جارٍ التحقق…";
+    status.className = "accessError is-pending";
+    status.hidden = false;
+    setState("authenticating");
+
+    try {
+      // STAGE 3 + 5: exchange the provisional for the trusted server
+      // session. The account is bound by the backend, not by the client.
+      const { ok, payload } = await postLogin(pendingProvisional, user);
+
+      if (ok && payload && payload.authenticated) {
+        pendingProvisional = null;
+        pendingProvisionalExpiresAt = 0;
+        // NEW successful authentication -> Intro may autoplay once.
+        markNewAuth();
+        await enterTrusted(payload, { isNewAuth: true });
+        return;
+      }
+
+      // Provisional rejected (expired/reused) -> back to the code step.
+      resetToAccessGate("انتهت صلاحية التحقق. أدخل الكود مرة أخرى.");
+    } catch (error) {
+      console.error("Account selection failed:", error);
+      resetToAccessGate("تعذّر إكمال الدخول. حاول مرة أخرى.");
+    } finally {
+      submitting = false;
+    }
+  }
+
+  options.forEach((option) => {
+    option.addEventListener("click", () => chooseAccount(option.dataset.user, option));
+  });
+}
+
+function unmountAccountSelection() {
+  if (accessGateMount) accessGateMount.replaceChildren();
+}
+
+/* Returns the visitor to a clean STAGE 1 with an explanatory message. */
+function resetToAccessGate(message) {
+  pendingProvisional = null;
+  pendingProvisionalExpiresAt = 0;
+  setState("unauthenticated");
+  unmountAccountSelection();
+  mountAccessGate();
+  if (message) {
+    const error = document.querySelector("#accessError");
+    if (error) {
+      error.textContent = message;
+      error.hidden = false;
+    }
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Trusted routing (locked vs unlocked)                                */
+/* ------------------------------------------------------------------ */
+
+async function enterTrusted(state, options = {}) {
+  const { isNewAuth = false } = options;
+
+  setState("trusted");
+  destroyBoot();
+  unmountAccessGate();
+
+  // Fail closed: unless the backend explicitly says the lock is disabled,
+  // we treat the site as locked.
+  const lockEnabled = state.lockEnabled !== false;
+
+  if (isNewAuth) {
+    // Intro plays once, then transitions into whatever comes next.
+    await playIntro(true);
+  }
+
+  if (lockEnabled) {
+    setState("locked");
+    // Mount the Relationship Lock experience.
+    const { mountRelationshipLock } = await import(`./lock.js?v=${LOCK_VERSION}`);
+    mountRelationshipLock(lockMount, { state });
+  } else {
+    setState("trusted");
+    mountAppShell(state);
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Boot                                                                */
+/* ------------------------------------------------------------------ */
+
+async function boot() {
+  setState("checking-session");
+  showBoot(true);
+  unmountAll();
+  unmountAccessGate();
+
+  let state = null;
+  try {
+    state = await fetchSession();
+  } catch (error) {
+    // FAIL CLOSED: backend unavailable -> no trust -> Access Gate.
+    console.error("Session check failed:", error);
+    state = null;
+  }
+
+  const trusted = !!(state && state.authenticated && state.user);
+
+  if (trusted) {
+    // A trusted page reload NEVER autoplays the Intro.
+    const isNewAuth = consumeNewAuth();
+    try {
+      await enterTrusted(state, { isNewAuth });
+    } catch (error) {
+      // If mounting the trusted experience throws, fail safe to the gate.
+      console.error("Failed to enter trusted state:", error);
+      setState("unauthenticated");
+      destroyBoot();
+      mountAccessGate();
+    }
+    return;
+  }
+
+  // Not trusted -> Access Gate only. No Intro, no chat, no account info.
+  setState("unauthenticated");
+  destroyBoot();
+  mountAccessGate();
+}
+
+/* ------------------------------------------------------------------ */
+/* Change account / logout                                             */
+/* ------------------------------------------------------------------ */
+
+async function logoutAndReturnToGate() {
+  setState("logging-out");
+  // Remove authenticated UI + lock + intro immediately so nothing lingers.
+  unmountAll();
+  unmountAccessGate();
+  appModuleLoaded = false;
+
+  // The provisional pre-auth state must never survive a logout either.
+  pendingProvisional = null;
+  pendingProvisionalExpiresAt = 0;
+
+  // Invalidate the server session (authoritative) and clear local state.
+  await postLogout();
+  try {
+    localStorage.removeItem("currentUser");
+    sessionStorage.removeItem(INTRO_NEW_AUTH_KEY);
+  } catch { }
+
+  setState("unauthenticated");
+  destroyBoot();
+  mountAccessGate();
+}
+
+/* app.js exposes window.changeUser; make it terminate the real session. */
+window.changeUser = function () {
+  logoutAndReturnToGate();
+};
+
+boot();

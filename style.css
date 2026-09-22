@@ -29,11 +29,33 @@ display:none;
 
 }
 
-
 #userSelector{
 
 margin-top:120px;
 
+}
+
+/* --- Boot / checking shell ---------------------------------------------
+   Shown only while the backend session/lock decision is being resolved.
+   Neutral, no sensitive data. */
+.bootState {
+	display: grid;
+	place-items: center;
+	gap: 14px;
+	min-height: 100svh;
+	padding: max(20px, env(safe-area-inset-top)) 16px max(20px, env(safe-area-inset-bottom));
+	text-align: center;
+}
+.bootState[hidden] { display: none; }
+.bootHeart {
+	font-size: 44px;
+	filter: drop-shadow(0 0 22px rgba(255, 110, 160, .55));
+	animation: bootPulse 2.4s ease-in-out infinite;
+}
+.bootLabel { margin: 0; color: var(--muted); font-size: 14px; letter-spacing: .02em; }
+@keyframes bootPulse {
+	0%, 100% { transform: scale(1); opacity: .82; }
+	50% { transform: scale(1.08); opacity: 1; }
 }
 
 

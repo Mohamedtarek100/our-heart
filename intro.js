@@ -26,7 +26,7 @@
    ============================================================ */
 
 const INTRO_STYLESHEET_ID = "romanticIntroStyles";
-const INTRO_STYLESHEET_HREF = "intro.css?v=6";
+const INTRO_STYLESHEET_HREF = "intro.css?v=7";
 
 /* Timeline (ms from scene-1 start). Total ~21s — under the 30s
    ceiling, and never padded with dead time. */

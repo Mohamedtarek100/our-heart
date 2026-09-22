@@ -5,17 +5,63 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#080d1b">
+<meta name="robots" content="noindex, nofollow, noarchive, nosnippet, noimageindex">
+<meta name="referrer" content="no-referrer">
 <title>❤️ Our Heart</title>
 
 <link
 rel="stylesheet"
-href="style.css?v=4.8"
+href="style.css?v=4.9"
+>
+
+<link
+rel="stylesheet"
+href="lock.css?v=3"
 >
 
 </head>
 
 <body>
 
+
+<!-- ============================================================
+     APPLICATION ROOT
+     ------------------------------------------------------------
+     NOTHING authenticated is mounted here. The pre-trust DOM below
+     contains ONLY:
+       - a neutral boot/checking shell
+       - the Access Gate mount point
+     Every authenticated surface (account picker, chat, footer
+     controls, Love Intro, Change Account) is defined inside
+     <template> elements and is only cloned into the DOM after the
+     backend confirms a trusted session. It is therefore not merely
+     hidden with CSS — it does not exist before trust.
+     ============================================================ -->
+
+<div id="appRoot">
+
+	<section id="bootState" class="bootState" aria-live="polite">
+		<div class="bootHeart" aria-hidden="true">❤️</div>
+		<p class="bootLabel">جارٍ التحقق من أمان هذه المساحة…</p>
+	</section>
+
+	<!-- The Access Gate is mounted here (only while untrusted). -->
+	<div id="accessGateMount"></div>
+
+	<!-- The Relationship Lock experience is mounted here (trusted + locked). -->
+	<div id="lockMount"></div>
+
+	<!-- The normal authenticated application is mounted here (trusted + unlocked). -->
+	<div id="appMount"></div>
+
+</div>
+
+
+<!-- ============================================================
+     AUTHENTICATED APPLICATION TEMPLATE (not mounted until trusted)
+     ============================================================ -->
+
+<template id="tplAppShell">
 
 <!-- اختيار الحساب -->
 
@@ -79,7 +125,7 @@ Mohamed
 
 <button onclick="updateStatus('mohamed','🍽️ هتغدي يا قلبي ')">
 
-🍽️ هتغدي يا قلبي 
+🍽️ هتغدي يا قلبي
 
 </button>
 
@@ -100,7 +146,7 @@ Mohamed
 
 <button onclick="updateStatus('mohamed','😴 هنام يا نونتي ')">
 
-😴 هنام يا نونتي 
+😴 هنام يا نونتي
 
 </button>
 
@@ -112,7 +158,7 @@ Mohamed
 
 <button onclick="updateStatus('mohamed','❤️ انا كويس يا روحي ')">
 
-❤️ انا كويس يا روحي 
+❤️ انا كويس يا روحي
 
 </button>
 
@@ -151,14 +197,14 @@ NoNa
 
 <button onclick="updateStatus('yomna','📚 نازله الدرس يا حبيبي ')">
 
-📚 نازله الدرس يا حبيبي 
+📚 نازله الدرس يا حبيبي
 
 </button>
 
 
 <button onclick="updateStatus('yomna','🍽️ هتغدي يا قلبي ')">
 
-🍽️ هتغدي يا قلبي 
+🍽️ هتغدي يا قلبي
 
 </button>
 
@@ -178,7 +224,7 @@ NoNa
 
 <button onclick="updateStatus('yomna','😴 هنام يا حبيبي ')">
 
-😴 هنام يا حبيبي 
+😴 هنام يا حبيبي
 
 </button>
 
@@ -294,9 +340,13 @@ NoNa
 	<span>· v1.0.0</span>
 </footer>
 
+</div>
+
+</template>
+
 <script
 type="module"
-src="access.js?v=7"
+src="access.js?v=10"
 ></script>
 
 </body>

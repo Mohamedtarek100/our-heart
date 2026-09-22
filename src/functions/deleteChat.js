@@ -1,23 +1,39 @@
 const { app } = require("@azure/functions");
-const { CosmosClient } = require("@azure/cosmos");
+const {
+  container,
+  requireSessionAndUnlocked,
+  serverError,
+  corsHeaders
+} = require("./shared");
 
-const client = new CosmosClient({
-  endpoint: process.env.COSMOS_ENDPOINT,
-  key: process.env.COSMOS_KEY
-});
-
-const database = client.database(process.env.COSMOS_DATABASE);
-const container = database.container(process.env.COSMOS_CONTAINER);
-
+/* Delete is part of the locked chat experience.
+   Secure flow:
+     request
+     → require trusted session
+     → derive current user server-side
+     → load target message
+     → validate ownership
+     → check relationship lock (requireSessionAndUnlocked)
+     → authorize
+     → execute
+   The client can never supply the identity used for the ownership check. */
 app.http("deleteChat", {
-  methods: ["DELETE"],
+  methods: ["DELETE", "OPTIONS"],
   authLevel: "anonymous",
 
   handler: async (request, context) => {
+    if (request.method === "OPTIONS") {
+      return { status: 204, headers: corsHeaders(request) };
+    }
+
+    const gate = await requireSessionAndUnlocked(request);
+    if (!gate.ok) return gate.response;
+
     try {
-      const body = await request.json();
+      const body = await request.json().catch(() => ({}));
       const messageId = String(body.messageId || "").trim();
-      const user = String(body.user || body.sender || "").trim();
+      // Ownership identity ALWAYS comes from the trusted session.
+      const user = gate.user;
 
       if (!messageId) {
         return {
@@ -25,16 +41,6 @@ app.http("deleteChat", {
           jsonBody: {
             success: false,
             error: "messageId is required"
-          }
-        };
-      }
-
-      if (!user) {
-        return {
-          status: 400,
-          jsonBody: {
-            success: false,
-            error: "user is required"
           }
         };
       }
@@ -71,15 +77,7 @@ app.http("deleteChat", {
         }
       };
     } catch (error) {
-      context.error("Delete chat error:", error);
-
-      return {
-        status: 500,
-        jsonBody: {
-          success: false,
-          error: error.message
-        }
-      };
+      return serverError(request, context, error, "Unable to delete message");
     }
   }
 });

@@ -4,20 +4,36 @@ const {
   BlobSASPermissions
 } = require("@azure/storage-blob");
 const busboy = require("busboy");
+const {
+  requireSessionAndUnlocked,
+  serverError,
+  corsHeaders
+} = require("./shared");
 
 const connectionString = process.env.AZURE_STORAGE_CONNECTION_STRING;
-const corsHeaders = {
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Allow-Headers": "*"
-};
+
+/* Voice upload is part of the locked chat experience.
+   - Requires a trusted session AND an unlocked relationship.
+   - CORS is restricted to the allowed frontend origin(s) via the shared
+     helper (no wildcard).
+   - The SAS URL is only ever returned to an authenticated caller. */
 app.http('uploadVoice', {
-    methods: ['POST'],
+    methods: ['POST', 'OPTIONS'],
     authLevel: 'anonymous',
 
     handler: async (request, context) => {
 
-        return new Promise(async (resolve, reject) => {
+        if (request.method === 'OPTIONS') {
+            return { status: 204, headers: corsHeaders(request) };
+        }
+
+        // Trusted session + lock gate. Fails CLOSED.
+        const gate = await requireSessionAndUnlocked(request);
+        if (!gate.ok) return gate.response;
+
+        const responseHeaders = corsHeaders(request);
+
+        return new Promise(async (resolve) => {
 
             let settled = false;
             const respond = (response) => {
@@ -30,7 +46,7 @@ app.http('uploadVoice', {
             try {
                 bb = busboy({ headers: Object.fromEntries(request.headers) });
             } catch (error) {
-                respond({ status: 400, headers: corsHeaders, jsonBody: { success: false, error: error.message } });
+                respond({ status: 400, headers: responseHeaders, jsonBody: { success: false, error: "Invalid upload" } });
                 return;
             }
 
@@ -77,7 +93,7 @@ app.http('uploadVoice', {
 
                                 respond({
     status: 201,
-    headers: corsHeaders,
+    headers: responseHeaders,
     jsonBody: {
         success: true,
     url: sasUrl
@@ -86,16 +102,14 @@ app.http('uploadVoice', {
                 }
 
                 catch (err) {
-                                        context.error("Voice upload error:", err);
-                                        respond({ status: 500, headers: corsHeaders, jsonBody: { success: false, error: err.message } });
+                                        respond({ status: 500, headers: responseHeaders, jsonBody: { success: false, error: "Voice upload failed" } });
 
                 }
 
             });
 
                         bb.on("error", (error) => {
-                                context.error("Voice multipart parse error:", error);
-                                respond({ status: 400, headers: corsHeaders, jsonBody: { success: false, error: error.message } });
+                                respond({ status: 400, headers: responseHeaders, jsonBody: { success: false, error: "Invalid upload" } });
                         });
 
             bb.end(Buffer.from(await request.arrayBuffer()));

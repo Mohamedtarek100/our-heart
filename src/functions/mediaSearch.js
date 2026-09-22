@@ -1,15 +1,25 @@
 const { app } = require("@azure/functions");
+const {
+  requireSessionAndUnlocked,
+  corsHeaders
+} = require("./shared");
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, OPTIONS",
-  "Access-Control-Allow-Headers": "*"
-};
-
+/* Media search backs the sticker/GIF picker which is part of the locked
+   chat experience, so it requires a trusted session AND an unlocked
+   relationship. CORS is restricted to the allowed origin(s). */
 app.http("mediaSearch", {
-  methods: ["GET"],
+  methods: ["GET", "OPTIONS"],
   authLevel: "anonymous",
   handler: async (request, context) => {
+    if (request.method === "OPTIONS") {
+      return { status: 204, headers: corsHeaders(request) };
+    }
+
+    // Trusted session + lock gate. Fails CLOSED.
+    const gate = await requireSessionAndUnlocked(request);
+    if (!gate.ok) return gate.response;
+
+    const responseHeaders = corsHeaders(request);
     const type = String(request.query.get("type") || "").trim();
     const query = String(request.query.get("q") || "").trim().slice(0, 80);
     const apiKey = process.env.GIPHY_API_KEY;
@@ -17,7 +27,7 @@ app.http("mediaSearch", {
     if (!apiKey) {
       return {
         status: 503,
-        headers: corsHeaders,
+        headers: responseHeaders,
         jsonBody: { success: false, error: "Media search is not configured" }
       };
     }
@@ -25,7 +35,7 @@ app.http("mediaSearch", {
     if (!["sticker", "gif"].includes(type) || !query) {
       return {
         status: 400,
-        headers: corsHeaders,
+        headers: responseHeaders,
         jsonBody: { success: false, error: "type and q are required" }
       };
     }
@@ -57,14 +67,14 @@ app.http("mediaSearch", {
 
       return {
         status: 200,
-        headers: corsHeaders,
+        headers: responseHeaders,
         jsonBody: { success: true, items }
       };
     } catch (error) {
       context.error("Media search error:", error);
       return {
         status: 502,
-        headers: corsHeaders,
+        headers: responseHeaders,
         jsonBody: { success: false, error: "Media provider unavailable" }
       };
     }

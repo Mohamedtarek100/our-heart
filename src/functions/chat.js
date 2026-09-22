@@ -1,22 +1,24 @@
 const { app } = require("@azure/functions");
-const { CosmosClient } = require("@azure/cosmos");
-
-const client = new CosmosClient({
-  endpoint: process.env.COSMOS_ENDPOINT,
-  key: process.env.COSMOS_KEY
-});
-
-const database = client.database(process.env.COSMOS_DATABASE);
-const container = database.container(process.env.COSMOS_CONTAINER);
+const {
+  container,
+  requireSessionAndUnlocked,
+  serverError
+} = require("./shared");
 
 // GET: آخر 60 رسالة
+// LOCKED: requires a trusted session AND an unlocked relationship.
 app.http("getChat", {
-  methods: ["GET"],
+  methods: ["GET", "OPTIONS"],
   authLevel: "anonymous",
 
   handler: async (request, context) => {
+    // Trusted session + lock gate. Fails CLOSED.
+    const gate = await requireSessionAndUnlocked(request);
+    if (!gate.ok) return gate.response;
+
     try {
       const querySpec = {
+        partitionKey: "chat",
         query: `
           SELECT TOP 60 *
           FROM c
@@ -38,30 +40,29 @@ app.http("getChat", {
       };
 
     } catch (error) {
-      context.error("Get chat error:", error);
-
-      return {
-        status: 500,
-        jsonBody: {
-          success: false,
-          error: error.message
-        }
-      };
+      return serverError(request, context, error, "Unable to load messages");
     }
   }
 });
 
 
 // GET: new messages + fast seen/read-receipt updates
+// LOCKED: requires a trusted session AND an unlocked relationship.
 app.http("getNewMessages", {
-  methods: ["GET"],
+  methods: ["GET", "OPTIONS"],
   authLevel: "anonymous",
 
   handler: async (request, context) => {
+    // Trusted session + lock gate. Fails CLOSED.
+    const gate = await requireSessionAndUnlocked(request);
+    if (!gate.ok) return gate.response;
+
     try {
       const after = Number(request.query.get("after"));
       const seenAfter = Number(request.query.get("seenAfter") || 0);
-      const user = String(request.query.get("user") || "").trim();
+      // The identity ALWAYS comes from the trusted session — a client-supplied
+      // "user" query value is never used to decide what this caller may read.
+      const user = gate.user;
 
       if (!Number.isFinite(after)) {
         return {
@@ -111,36 +112,32 @@ app.http("getNewMessages", {
         jsonBody: resources
       };
     } catch (error) {
-      context.error("Get new messages error:", error);
-
-      return {
-        status: 500,
-        jsonBody: {
-          success: false,
-          error: error.message
-        }
-      };
+      return serverError(request, context, error, "Unable to load messages");
     }
   }
 });
 
 // POST: إضافة رسالة
+// LOCKED: requires a trusted session AND an unlocked relationship.
 app.http("sendChat", {
-  methods: ["POST"],
+  methods: ["POST", "OPTIONS"],
   authLevel: "anonymous",
 
   handler: async (request, context) => {
+    // Trusted session + lock gate. Fails CLOSED.
+    const gate = await requireSessionAndUnlocked(request);
+    if (!gate.ok) return gate.response;
+
     try {
       const body = await request.json();
 
-      // لازم يكون فيه sender
-      if (!body.sender) {
+      // The sender is ALWAYS the trusted session user. Any client-supplied
+      // sender/owner/userId/account value is ignored on purpose.
+      const sender = gate.user;
+      if (!sender) {
         return {
-          status: 400,
-          jsonBody: {
-            success: false,
-            error: "sender is required"
-          }
+          status: 401,
+          jsonBody: { success: false, error: "Authentication required" }
         };
       }
 
@@ -173,7 +170,7 @@ app.http("sendChat", {
       const item = {
         id: crypto.randomUUID(),
         type: "chat",
-        sender: body.sender,
+        sender,
         messageType,
         text: body.text || "",
         voiceUrl: body.voiceUrl || "",
@@ -207,36 +204,31 @@ app.http("sendChat", {
       };
 
     } catch (error) {
-      context.error("Send chat error:", error);
-
-      return {
-        status: 500,
-        jsonBody: {
-          success: false,
-          error: error.message
-        }
-      };
+      return serverError(request, context, error, "Unable to send message");
     }
   }
 });
 
 // POST: mark messages from the other user as seen
+// LOCKED: requires a trusted session AND an unlocked relationship.
 app.http("markSeen", {
-  methods: ["POST"],
+  methods: ["POST", "OPTIONS"],
   authLevel: "anonymous",
 
   handler: async (request, context) => {
+    // Trusted session + lock gate. Fails CLOSED.
+    const gate = await requireSessionAndUnlocked(request);
+    if (!gate.ok) return gate.response;
+
     try {
-      const body = await request.json();
-      const user = String(body.user || "").trim();
+      // The identity ALWAYS comes from the trusted session, never from the
+      // request body.
+      const user = gate.user;
 
       if (!user) {
         return {
-          status: 400,
-          jsonBody: {
-            success: false,
-            error: "user is required"
-          }
+          status: 401,
+          jsonBody: { success: false, error: "Authentication required" }
         };
       }
 
@@ -265,15 +257,7 @@ app.http("markSeen", {
         }
       };
     } catch (error) {
-      context.error("Mark seen error:", error);
-
-      return {
-        status: 500,
-        jsonBody: {
-          success: false,
-          error: error.message
-        }
-      };
+      return serverError(request, context, error, "Unable to update messages");
     }
   }
 });

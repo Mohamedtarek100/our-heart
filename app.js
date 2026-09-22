@@ -871,10 +871,13 @@ window.typing = function(){
 
 
 // اختيار المستخدم
-let currentUser = localStorage.getItem("currentUser");
+// The trusted identity comes from the SERVER session (set by access.js as
+// window.__OUR_HEART_USER before app.js is imported). localStorage is kept
+// only as a non-authoritative display cache and is NEVER trusted for access.
+let currentUser = window.__OUR_HEART_USER || null;
 if (currentUser !== "Mohamed" && currentUser !== "Yomna") {
   currentUser = null;
-  localStorage.removeItem("currentUser");
+  try { localStorage.removeItem("currentUser"); } catch {}
 }
 
 const otherUser = currentUser === "Mohamed" ? "Yomna" : "Mohamed";
@@ -931,9 +934,11 @@ updateChatHeader();
 
 if (currentUser === "Mohamed" || currentUser === "Yomna") {
 
-  mainApp.style.display = "block";
-  mainApp.classList.add("is-authenticated");
-  userSelector.style.display = "none";
+  if (mainApp) {
+    mainApp.style.display = "block";
+    mainApp.classList.add("is-authenticated");
+  }
+  if (userSelector) userSelector.style.display = "none";
   updateOnlineStatus();
 
 }

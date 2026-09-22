@@ -1,0 +1,1222 @@
+/* ============================================================
+   Our Heart — Relationship Lock experience
+   ------------------------------------------------------------
+   One coherent cinematic system. Everything is scoped under
+   #relationshipLock (and the Access Gate additions live under
+   #accessGate, which is only mounted before trust).
+
+   Design language shared by every section:
+     - deep dark background        (#05060d)
+     - rose / violet accent glow
+     - warm off-white text
+     - glass panels + soft borders
+     - one easing curve, one spacing scale
+   ============================================================ */
+
+:root {
+	--lock-bg: #05060d;
+	--lock-ink: #fdf3f7;
+	--lock-muted: rgba(238, 219, 231, .66);
+	--lock-rose: #ff7aa9;
+	--lock-rose-soft: rgba(255, 122, 169, .16);
+	--lock-violet: #b98cff;
+	--lock-gold: #f7c58c;
+	--lock-panel: rgba(22, 14, 26, .55);
+	--lock-line: rgba(255, 160, 195, .16);
+	--lock-ease: cubic-bezier(.22, .8, .24, 1);
+	--lock-radius: 22px;
+}
+
+/* ============================================================
+   STAGE 1 — ACCESS GATE (Access Code only)
+   ============================================================ */
+
+/* Elegant exit when the code has been accepted and the account
+   selection stage is about to appear. */
+#accessGate.is-leaving {
+	opacity: 0;
+	transform: translateY(-10px) scale(.985);
+	transition: opacity .4s var(--lock-ease), transform .4s var(--lock-ease);
+}
+
+/* ============================================================
+   STAGE 2 — ACCOUNT SELECTION (only after a valid Access Code)
+   ============================================================ */
+
+#accountSelection {
+	display: grid;
+	place-items: center;
+	min-height: 100svh;
+	padding: max(20px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(20px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+}
+
+#accountSelection .accountCard {
+	animation: accountStageIn .6s var(--lock-ease) both;
+}
+@keyframes accountStageIn {
+	0%   { opacity: 0; transform: translateY(18px) scale(.97); filter: blur(6px); }
+	100% { opacity: 1; transform: none; filter: blur(0); }
+}
+
+#accountSelection .accessHeart {
+	animation: accountHeartIn .8s var(--lock-ease) both;
+}
+@keyframes accountHeartIn {
+	0%   { opacity: 0; transform: scale(.7); }
+	60%  { opacity: 1; }
+	100% { opacity: 1; transform: scale(1); }
+}
+
+.accountOptions {
+	display: grid;
+	gap: 12px;
+	margin: 22px 0 6px;
+}
+
+/* Premium account cards — tactile, glowing, RTL-safe. */
+.accountOption {
+	position: relative;
+	display: grid;
+	gap: 3px;
+	justify-items: center;
+	min-height: 66px;
+	padding: 14px 18px;
+	border: 1px solid var(--lock-line);
+	border-radius: 16px;
+	color: var(--text);
+	background: linear-gradient(135deg, rgba(255, 122, 169, .08), rgba(185, 140, 255, .06));
+	font: inherit;
+	cursor: pointer;
+	overflow: hidden;
+	transition:
+		border-color .24s var(--lock-ease),
+		transform .18s var(--lock-ease),
+		box-shadow .24s var(--lock-ease),
+		background .24s var(--lock-ease);
+	opacity: 0;
+	animation: accountOptionIn .55s var(--lock-ease) both;
+}
+.accountOption:nth-child(1) { animation-delay: .12s; }
+.accountOption:nth-child(2) { animation-delay: .22s; }
+@keyframes accountOptionIn {
+	0%   { opacity: 0; transform: translateY(14px); filter: blur(5px); }
+	100% { opacity: 1; transform: none; filter: blur(0); }
+}
+
+.accountOption::before {
+	content: "";
+	position: absolute;
+	inset: 0;
+	background: radial-gradient(120% 130% at 50% 0%, rgba(255, 150, 190, .22), transparent 62%);
+	opacity: 0;
+	transition: opacity .24s ease;
+}
+.accountOption > span { position: relative; }
+
+.accountOptionAvatar {
+	display: grid;
+	place-items: center;
+	width: 46px;
+	height: 46px;
+	border: 1px solid rgba(255, 170, 200, .35);
+	border-radius: 50%;
+	background: linear-gradient(135deg, rgba(255, 122, 169, .18), rgba(185, 140, 255, .14));
+	font-size: 20px;
+}
+.accountOptionName { font-size: 18px; font-weight: 700; }
+
+/* WhatsApp-like presence line — real server data only. */
+.accountOptionStatus {
+	font-size: 12px;
+	color: var(--muted);
+	letter-spacing: .01em;
+}
+.accountOptionStatus.is-online { color: #7ee0a8; }
+.accountOptionStatus:empty { display: none; }
+
+.accountOption:hover,
+.accountOption:focus-visible {
+	border-color: rgba(255, 170, 200, .55);
+	background: linear-gradient(135deg, rgba(255, 122, 169, .16), rgba(185, 140, 255, .12));
+	transform: translateY(-2px);
+	box-shadow: 0 14px 34px rgba(255, 90, 150, .18);
+	outline: none;
+}
+.accountOption:hover::before { opacity: .8; }
+.accountOption:active { transform: translateY(1px) scale(.99); }
+
+.accountOption.is-selected {
+	border-color: rgba(255, 190, 215, .9);
+	box-shadow: 0 0 0 3px rgba(255, 122, 169, .2), 0 16px 38px rgba(255, 90, 150, .28);
+}
+.accountOption.is-selected::before { opacity: 1; }
+.accountOption:disabled { cursor: default; }
+.accountOption:disabled:not(.is-selected) { opacity: .45; }
+
+@media (prefers-reduced-motion: reduce) {
+	#accountSelection .accountCard,
+	#accountSelection .accessHeart,
+	.accountOption {
+		animation: none !important;
+		opacity: 1 !important;
+		filter: none !important;
+		transform: none !important;
+	}
+}
+
+/* ============================================================
+   LOCK SHELL
+   ============================================================ */
+
+#relationshipLock {
+	position: relative;
+	z-index: 1;
+	min-height: 100svh;
+	overflow-x: hidden;
+	color: var(--lock-ink);
+	background: var(--lock-bg);
+	direction: rtl;
+	isolation: isolate;
+	-webkit-tap-highlight-color: transparent;
+}
+
+#relationshipLock.is-ready {
+	animation: lockIn 1.1s var(--lock-ease) both;
+}
+@keyframes lockIn {
+	from { opacity: 0; }
+	to   { opacity: 1; }
+}
+
+/* --- Ambient background layers --- */
+#relationshipLock .lock-bg {
+	position: fixed;
+	inset: 0;
+	z-index: 0;
+	pointer-events: none;
+	background:
+		radial-gradient(120% 80% at 50% 2%, rgba(126, 44, 96, .38), transparent 60%),
+		radial-gradient(90% 70% at 50% 100%, rgba(46, 30, 92, .40), transparent 66%),
+		linear-gradient(165deg, #0b0a18 0%, #05060d 58%, #04040a 100%);
+}
+
+/* A slow, always-living central glow (never static after the entrance). */
+#relationshipLock .lock-glow {
+	position: fixed;
+	top: 34%;
+	left: 50%;
+	z-index: 0;
+	width: min(150vw, 900px);
+	height: min(150vw, 900px);
+	transform: translate3d(-50%, -50%, 0);
+	border-radius: 50%;
+	pointer-events: none;
+	background: radial-gradient(circle, rgba(255, 122, 169, .22), rgba(255, 90, 150, .07) 42%, transparent 70%);
+	animation: lockGlowBreathe 7s ease-in-out infinite;
+	will-change: opacity, transform;
+}
+@keyframes lockGlowBreathe {
+	0%, 100% { opacity: .55; transform: translate3d(-50%, -50%, 0) scale(.94); }
+	50%      { opacity: 1;   transform: translate3d(-50%, -50%, 0) scale(1.08); }
+}
+
+#relationshipLock .lock-particles {
+	position: fixed;
+	inset: 0;
+	z-index: 1;
+	display: block;
+	width: 100%;
+	height: 100%;
+	pointer-events: none;
+}
+
+/* Fireworks canvas (celebration) sits above content but below panels. */
+#relationshipLock .lock-fireworks {
+	position: fixed;
+	inset: 0;
+	z-index: 60;
+	display: block;
+	width: 100%;
+	height: 100%;
+	pointer-events: none;
+	opacity: 0;
+	transition: opacity .5s ease;
+}
+#relationshipLock .lock-fireworks.is-active { opacity: 1; }
+
+#relationshipLock .lock-vignette {
+	position: fixed;
+	inset: 0;
+	z-index: 2;
+	pointer-events: none;
+	background: radial-gradient(130% 90% at 50% 40%, transparent 55%, rgba(0, 0, 0, .6) 100%);
+}
+
+/* --- Content column --- */
+#relationshipLock .lock-content {
+	position: relative;
+	z-index: 10;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: clamp(30px, 5vw, 64px);
+	width: min(100%, 940px);
+	margin: 0 auto;
+	padding:
+		max(46px, env(safe-area-inset-top))
+		max(20px, env(safe-area-inset-right))
+		max(76px, env(safe-area-inset-bottom))
+		max(20px, env(safe-area-inset-left));
+	text-align: center;
+}
+
+/* ============================================================
+   SECTION 1 — MAIN MESSAGE (cinematic reveal)
+   ============================================================ */
+
+#relationshipLock .lock-message {
+	position: relative;
+	width: 100%;
+	max-width: 760px;
+	margin-top: clamp(6px, 4vh, 48px);
+}
+
+#relationshipLock .lock-heart-mark {
+	display: block;
+	font-size: clamp(34px, 7vw, 54px);
+	line-height: 1;
+	margin-bottom: clamp(14px, 3vh, 28px);
+	opacity: 0;
+	filter: drop-shadow(0 0 26px rgba(255, 110, 160, .7));
+	animation: lockMarkIn 1.6s var(--lock-ease) .1s forwards;
+}
+@keyframes lockMarkIn {
+	0%   { opacity: 0; transform: translate3d(0, 18px, 0) scale(.7); }
+	55%  { opacity: 1; }
+	100% { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+}
+#relationshipLock .lock-heart-mark span {
+	display: inline-block;
+	animation: lockHeartBeat 3.4s ease-in-out infinite;
+}
+@keyframes lockHeartBeat {
+	0%, 100% { transform: scale(1); }
+	9%       { transform: scale(1.12); }
+	20%      { transform: scale(1); }
+	30%      { transform: scale(1.05); }
+	46%      { transform: scale(1); }
+}
+
+#relationshipLock .lock-message-text {
+	margin: 0;
+	font-family: "Amiri", "Segoe UI", "Trebuchet MS", serif;
+	font-weight: 400;
+	font-size: clamp(17px, 4.6vw, 25px);
+	line-height: 2.05;
+	color: var(--lock-ink);
+	text-wrap: pretty;
+	overflow-wrap: break-word;
+}
+
+/* Each phrase is revealed on its own, blur-to-sharp, with a small
+   translate + scale — driven by a class the JS adds in sequence. */
+#relationshipLock .lock-phrase {
+	display: inline;
+	opacity: 0;
+	filter: blur(9px);
+	transform: translate3d(0, 12px, 0) scale(.99);
+	transition:
+		opacity 1.1s var(--lock-ease),
+		filter 1.1s var(--lock-ease),
+		transform 1.1s var(--lock-ease);
+	will-change: opacity, filter, transform;
+}
+#relationshipLock .lock-phrase.is-shown {
+	opacity: 1;
+	filter: blur(0);
+	transform: translate3d(0, 0, 0) scale(1);
+}
+
+/* A soft light sweep that crosses the message as it settles. */
+#relationshipLock .lock-message::after {
+	content: "";
+	position: absolute;
+	inset: -6% -10%;
+	pointer-events: none;
+	background: linear-gradient(105deg, transparent 42%, rgba(255, 210, 230, .18) 50%, transparent 58%);
+	opacity: 0;
+	transform: translateX(30%);
+}
+#relationshipLock .lock-message.is-swept::after {
+	animation: lockSweep 1.9s ease .1s 1;
+}
+@keyframes lockSweep {
+	0%   { opacity: 0; transform: translateX(35%); }
+	35%  { opacity: 1; }
+	100% { opacity: 0; transform: translateX(-35%); }
+}
+
+/* --- Small romantic subtitle (lower visual hierarchy) --- */
+#relationshipLock .lock-subtitle {
+	margin: clamp(14px, 3vw, 22px) 0 0;
+	font-size: clamp(13px, 3.6vw, 17px);
+	line-height: 1.9;
+	color: #ffcfe0;
+	font-style: italic;
+	letter-spacing: .01em;
+	text-shadow: 0 0 22px rgba(255, 120, 170, .4);
+	opacity: 0;
+	transform: translate3d(0, 10px, 0);
+	filter: blur(5px);
+	transition: opacity .9s var(--lock-ease), transform .9s var(--lock-ease), filter .9s var(--lock-ease);
+}
+#relationshipLock .lock-subtitle.is-shown {
+	opacity: .92;
+	transform: none;
+	filter: blur(0);
+}
+
+/* --- "ملاحظة" note button (small secondary control) --- */
+#relationshipLock .lock-note-btn {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	min-height: 42px;
+	margin-top: clamp(16px, 3vw, 22px);
+	padding: 9px 18px;
+	border: 1px solid var(--lock-line);
+	border-radius: 999px;
+	color: var(--lock-ink);
+	background: linear-gradient(135deg, rgba(255, 122, 169, .12), rgba(185, 140, 255, .08));
+	font: inherit;
+	font-size: clamp(13px, 3.6vw, 15px);
+	font-weight: 600;
+	cursor: pointer;
+	opacity: 0;
+	transform: translate3d(0, 10px, 0);
+	transition: opacity .7s var(--lock-ease), transform .7s var(--lock-ease),
+		border-color .2s ease, background .2s ease, box-shadow .25s var(--lock-ease);
+}
+#relationshipLock .lock-note-btn.is-shown { opacity: 1; transform: none; }
+#relationshipLock .lock-note-btn:hover,
+#relationshipLock .lock-note-btn:focus-visible {
+	border-color: rgba(255, 180, 210, .6);
+	background: linear-gradient(135deg, rgba(255, 122, 169, .22), rgba(185, 140, 255, .14));
+	box-shadow: 0 12px 30px rgba(255, 90, 150, .22);
+	transform: translateY(-1px);
+	outline: none;
+}
+#relationshipLock .lock-note-btn:active { transform: translateY(1px) scale(.98); }
+#relationshipLock .lock-note-btn.is-active {
+	border-color: rgba(255, 190, 215, .9);
+	box-shadow: 0 0 0 3px rgba(255, 122, 169, .18);
+}
+#relationshipLock .lock-note-icon { font-size: 1.15em; line-height: 1; color: var(--lock-rose); }
+
+/* --- Private note panel --- */
+#relationshipLock .lock-note-backdrop {
+	position: fixed;
+	z-index: 90;
+	inset: 0;
+	background: rgba(3, 3, 8, .6);
+	opacity: 0;
+	pointer-events: none;
+	transition: opacity .4s ease;
+}
+#relationshipLock .lock-note-backdrop.is-open { opacity: 1; pointer-events: auto; }
+
+#relationshipLock .lock-note-panel {
+	position: fixed;
+	z-index: 95;
+	inset-inline: 0;
+	bottom: 0;
+	max-height: 80svh;
+	overflow-y: auto;
+	padding: clamp(24px, 6vw, 38px) clamp(20px, 6vw, 40px) max(30px, env(safe-area-inset-bottom));
+	border-top: 1px solid var(--lock-line);
+	border-radius: 26px 26px 0 0;
+	background: linear-gradient(180deg, rgba(34, 20, 38, .97), rgba(12, 9, 17, .99));
+	box-shadow: 0 -24px 64px rgba(0, 0, 0, .55);
+	backdrop-filter: blur(16px);
+	-webkit-backdrop-filter: blur(16px);
+	transform: translateY(102%);
+	transition: transform .55s var(--lock-ease);
+	pointer-events: none;
+	visibility: hidden;
+}
+#relationshipLock .lock-note-panel.is-open {
+	transform: translateY(0);
+	pointer-events: auto;
+	visibility: visible;
+}
+#relationshipLock .lock-note-close {
+	position: absolute;
+	inset-inline-end: 16px;
+	inset-block-start: 14px;
+	width: 42px;
+	height: 42px;
+	padding: 0;
+	border: 1px solid var(--lock-line);
+	border-radius: 50%;
+	color: var(--lock-ink);
+	background: rgba(255, 255, 255, .06);
+	font-size: 22px;
+	cursor: pointer;
+	transition: background .2s ease, border-color .2s ease;
+}
+#relationshipLock .lock-note-close:hover { background: rgba(255, 255, 255, .12); border-color: rgba(255, 170, 200, .5); }
+#relationshipLock .lock-note-close:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+#relationshipLock .lock-note-inner {
+	display: grid;
+	gap: clamp(14px, 3vw, 20px);
+	justify-items: center;
+	max-width: 560px;
+	margin: 0 auto;
+	text-align: center;
+}
+#relationshipLock .lock-note-heart {
+	font-size: clamp(24px, 6vw, 34px);
+	color: var(--lock-rose);
+	filter: drop-shadow(0 0 20px rgba(255, 110, 160, .7));
+}
+#relationshipLock .lock-note-text {
+	margin: 0;
+	font-family: "Amiri", "Segoe UI", "Trebuchet MS", serif;
+	font-size: clamp(17px, 4.6vw, 24px);
+	line-height: 2;
+	color: var(--lock-ink);
+	opacity: 0;
+	filter: blur(9px);
+	transform: translate3d(0, 12px, 0);
+	transition: opacity 1s var(--lock-ease), filter 1s var(--lock-ease), transform 1s var(--lock-ease);
+}
+#relationshipLock .lock-note-text.is-shown {
+	opacity: 1;
+	filter: blur(0);
+	transform: none;
+}
+
+/* ============================================================
+   SECTION 2 — COUNTDOWN
+   ============================================================ */
+
+#relationshipLock .lock-section {
+	width: 100%;
+	opacity: 0;
+	transform: translate3d(0, 22px, 0);
+	transition: opacity .8s var(--lock-ease), transform .8s var(--lock-ease);
+	will-change: opacity, transform;
+}
+#relationshipLock .lock-section.is-shown {
+	opacity: 1;
+	transform: none;
+}
+
+#relationshipLock .lock-section-title {
+	margin: 0 0 clamp(14px, 2.4vw, 22px);
+	font-size: clamp(12px, 3.2vw, 15px);
+	font-weight: 600;
+	letter-spacing: .16em;
+	color: var(--lock-muted);
+	text-transform: uppercase;
+}
+
+/* Five-unit countdown: 5 across on desktop, intelligent wrap on mobile. */
+#relationshipLock .lock-countdown {
+	display: grid;
+	grid-template-columns: repeat(5, minmax(0, 1fr));
+	gap: clamp(7px, 1.4vw, 14px);
+	width: 100%;
+}
+
+#relationshipLock .lock-count-cell {
+	position: relative;
+	display: grid;
+	gap: 7px;
+	align-content: center;
+	padding: clamp(12px, 2.6vw, 22px) clamp(4px, 1.4vw, 12px);
+	border: 1px solid var(--lock-line);
+	border-radius: var(--lock-radius);
+	background: linear-gradient(180deg, rgba(38, 22, 40, .6), rgba(16, 11, 22, .5));
+	box-shadow: 0 16px 44px rgba(0, 0, 0, .35), inset 0 1px 0 rgba(255, 255, 255, .05);
+	backdrop-filter: blur(8px);
+	-webkit-backdrop-filter: blur(8px);
+	overflow: hidden;
+}
+/* Soft shimmer that keeps the countdown feeling alive. */
+#relationshipLock .lock-count-cell::after {
+	content: "";
+	position: absolute;
+	top: 0;
+	left: -60%;
+	width: 45%;
+	height: 100%;
+	background: linear-gradient(100deg, transparent, rgba(255, 210, 230, .1), transparent);
+	animation: countShimmer 6s ease-in-out infinite;
+	pointer-events: none;
+}
+@keyframes countShimmer {
+	0%, 70% { left: -60%; opacity: 0; }
+	80%      { opacity: 1; }
+	100%     { left: 120%; opacity: 0; }
+}
+#relationshipLock .lock-count-cell::before {
+	content: "";
+	position: absolute;
+	inset: 0;
+	background: radial-gradient(120% 70% at 50% 0%, rgba(255, 150, 190, .14), transparent 62%);
+	opacity: .8;
+	pointer-events: none;
+}
+#relationshipLock .lock-count-value {
+	position: relative;
+	font-size: clamp(20px, 5.4vw, 44px);
+	font-weight: 700;
+	line-height: 1;
+	font-variant-numeric: tabular-nums;
+	letter-spacing: .01em;
+	color: #fff5f9;
+	text-shadow: 0 0 26px rgba(255, 130, 175, .5);
+	transition: transform .5s var(--lock-ease), opacity .5s var(--lock-ease);
+}
+#relationshipLock .lock-count-value.is-ticking {
+	animation: lockTick .55s var(--lock-ease);
+}
+@keyframes lockTick {
+	0%   { transform: translateY(-6px); opacity: .35; }
+	100% { transform: translateY(0); opacity: 1; }
+}
+#relationshipLock .lock-count-label {
+	position: relative;
+	font-size: clamp(8px, 1.9vw, 11px);
+	letter-spacing: .1em;
+	color: var(--lock-muted);
+	text-transform: uppercase;
+}
+#relationshipLock .lock-count-cell.is-final .lock-count-value {
+	color: var(--lock-gold);
+	text-shadow: 0 0 30px rgba(247, 197, 140, .6);
+}
+
+/* Target date line, visually part of the countdown component. */
+#relationshipLock .lock-count-target {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 2px;
+	margin: clamp(14px, 2.6vw, 20px) 0 0;
+}
+#relationshipLock .lock-count-until {
+	font-size: clamp(9px, 2.4vw, 11px);
+	letter-spacing: .28em;
+	color: var(--lock-muted);
+	text-transform: uppercase;
+}
+#relationshipLock .lock-count-date {
+	font-size: clamp(18px, 5vw, 26px);
+	font-weight: 700;
+	letter-spacing: .04em;
+	color: #ffe6f1;
+	font-variant-numeric: tabular-nums;
+	text-shadow: 0 0 24px rgba(255, 130, 175, .45);
+}
+#relationshipLock .lock-countdown.is-finished { display: none; }
+#relationshipLock .lock-count-done {
+	margin: 4px 0 0;
+	font-size: clamp(15px, 4.4vw, 22px);
+	color: var(--lock-gold);
+	text-shadow: 0 0 26px rgba(247, 197, 140, .45);
+}
+
+/* ============================================================
+   SECTION 3 — DAILY QUESTIONS
+   ============================================================ */
+
+#relationshipLock .lock-question {
+	width: 100%;
+	max-width: 680px;
+	margin: 0 auto;
+	padding: clamp(18px, 4vw, 30px);
+	border: 1px solid var(--lock-line);
+	border-radius: var(--lock-radius);
+	background: linear-gradient(180deg, rgba(30, 18, 34, .62), rgba(14, 10, 20, .5));
+	box-shadow: 0 20px 54px rgba(0, 0, 0, .34), inset 0 1px 0 rgba(255, 255, 255, .05);
+	backdrop-filter: blur(8px);
+	-webkit-backdrop-filter: blur(8px);
+}
+
+#relationshipLock .lock-question-head {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 10px;
+	margin-bottom: clamp(14px, 3vw, 22px);
+}
+#relationshipLock .lock-question-owner {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	font-size: clamp(15px, 4vw, 19px);
+	font-weight: 700;
+	color: #fff;
+}
+#relationshipLock .lock-question-owner .lock-owner-dot {
+	width: 9px;
+	height: 9px;
+	border-radius: 50%;
+	background: var(--lock-rose);
+	box-shadow: 0 0 14px rgba(255, 122, 169, .9);
+}
+#relationshipLock .lock-question-hint {
+	margin: 0 0 clamp(16px, 3.4vw, 24px);
+	font-size: clamp(12px, 3.2vw, 14px);
+	color: var(--lock-muted);
+	line-height: 1.9;
+}
+
+#relationshipLock .lock-options {
+	display: grid;
+	gap: clamp(10px, 2.6vw, 15px);
+}
+
+#relationshipLock .lock-option {
+	position: relative;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	min-height: 62px;
+	padding: 16px 20px;
+	border: 1px solid var(--lock-line);
+	border-radius: 16px;
+	color: var(--lock-ink);
+	background: rgba(255, 255, 255, .045);
+	font: inherit;
+	font-size: clamp(15px, 4.2vw, 18px);
+	font-weight: 600;
+	line-height: 1.7;
+	cursor: pointer;
+	overflow: hidden;
+	transition:
+		border-color .24s var(--lock-ease),
+		background .24s var(--lock-ease),
+		transform .18s var(--lock-ease),
+		box-shadow .24s var(--lock-ease);
+}
+#relationshipLock .lock-option::before {
+	content: "";
+	position: absolute;
+	inset: 0;
+	background: radial-gradient(120% 130% at 50% 0%, rgba(255, 150, 190, .2), transparent 60%);
+	opacity: 0;
+	transition: opacity .24s ease;
+}
+#relationshipLock .lock-option > span { position: relative; }
+#relationshipLock .lock-option:hover,
+#relationshipLock .lock-option:focus-visible {
+	border-color: rgba(255, 170, 200, .5);
+	background: rgba(255, 255, 255, .08);
+	transform: translateY(-2px);
+	outline: none;
+}
+#relationshipLock .lock-option:hover::before { opacity: .7; }
+#relationshipLock .lock-option:active { transform: translateY(1px) scale(.99); }
+#relationshipLock .lock-option.is-selected {
+	border-color: rgba(255, 170, 200, .85);
+	background: linear-gradient(135deg, rgba(255, 122, 169, .24), rgba(185, 140, 255, .16));
+	box-shadow: 0 0 0 3px rgba(255, 122, 169, .16), 0 14px 34px rgba(255, 90, 150, .2);
+}
+#relationshipLock .lock-option.is-selected::before { opacity: 1; }
+#relationshipLock .lock-option.is-chosen {
+	border-color: rgba(255, 190, 215, .9);
+	cursor: default;
+}
+#relationshipLock .lock-option.is-disabled { opacity: .5; cursor: default; }
+#relationshipLock .lock-option:disabled { cursor: default; }
+#relationshipLock .lock-option-check {
+	position: absolute;
+	inset-inline-start: 16px;
+	font-size: 16px;
+	opacity: 0;
+	transform: scale(.6);
+	transition: opacity .3s var(--lock-ease), transform .3s var(--lock-ease);
+}
+#relationshipLock .lock-option.is-chosen .lock-option-check { opacity: 1; transform: scale(1); }
+
+#relationshipLock .lock-question-status {
+	margin: clamp(14px, 3vw, 20px) 0 0;
+	min-height: 22px;
+	font-size: clamp(12px, 3.2vw, 14px);
+	color: var(--lock-muted);
+	line-height: 1.8;
+}
+#relationshipLock .lock-question-status.is-confirmed { color: #bfe9d8; }
+#relationshipLock .lock-question-status.is-error { color: #ffd2dd; }
+#relationshipLock .lock-question-status.is-pending { color: var(--lock-muted); }
+
+/* Answered state keeps the chosen option visible (never an empty hole). */
+#relationshipLock .lock-question.is-locked-question { opacity: 1; }
+#relationshipLock .lock-question.is-locked-question .lock-options { opacity: .92; }
+
+/* Photo of the answered state + the gentle "see you tomorrow" line. */
+#relationshipLock .lock-next-checkin {
+	margin: clamp(10px, 2.4vw, 14px) 0 0;
+	font-size: clamp(12px, 3.4vw, 14px);
+	color: #ffd0e0;
+	letter-spacing: .02em;
+}
+
+/* Explicit states so a missing/failed question is never a silent void. */
+#relationshipLock .lock-questions-loading,
+#relationshipLock .lock-questions-empty {
+	margin: 0;
+	padding: clamp(20px, 5vw, 30px);
+	border: 1px dashed var(--lock-line);
+	border-radius: var(--lock-radius);
+	color: var(--lock-muted);
+	font-size: clamp(13px, 3.6vw, 15px);
+	line-height: 1.9;
+	text-align: center;
+}
+
+/* Staggered entrance for the two answer options. */
+#relationshipLock .lock-option {
+	animation: lockOptionIn .7s var(--lock-ease) both;
+	animation-delay: calc(var(--option-index, 0) * 120ms + 120ms);
+}
+@keyframes lockOptionIn {
+	0%   { opacity: 0; transform: translate3d(0, 14px, 0); }
+	100% { opacity: 1; transform: none; }
+}
+
+/* ============================================================
+   SECTION 4 — TODAY'S STATUS
+   ============================================================ */
+
+#relationshipLock .lock-today {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+	gap: clamp(10px, 2.4vw, 18px);
+	width: 100%;
+	max-width: 620px;
+	margin: 0 auto;
+}
+#relationshipLock .lock-today-person {
+	display: grid;
+	gap: 6px;
+	padding: clamp(14px, 3.4vw, 20px);
+	border: 1px solid var(--lock-line);
+	border-radius: 16px;
+	background: linear-gradient(180deg, rgba(28, 18, 32, .58), rgba(14, 10, 20, .48));
+	box-shadow: inset 0 1px 0 rgba(255, 255, 255, .05);
+	text-align: start;
+}
+#relationshipLock .lock-today-name {
+	font-size: clamp(14px, 3.8vw, 16px);
+	font-weight: 700;
+	color: #fff;
+}
+#relationshipLock .lock-today-state {
+	font-size: clamp(12px, 3.2vw, 14px);
+	color: var(--lock-muted);
+}
+#relationshipLock .lock-today-person.is-answered .lock-today-state { color: #bfe9d8; }
+#relationshipLock .lock-today-answer {
+	font-size: clamp(13px, 3.4vw, 15px);
+	color: #ffd9e6;
+	line-height: 1.7;
+}
+
+/* ============================================================
+   SECTION 5 — JOURNEY
+   ============================================================ */
+
+#relationshipLock .lock-journey {
+	width: 100%;
+	max-width: 860px;
+	margin: 0 auto;
+}
+
+#relationshipLock .lock-progress {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	gap: clamp(10px, 3vw, 26px);
+	margin-bottom: clamp(18px, 3.4vw, 28px);
+	font-size: clamp(12px, 3.2vw, 14px);
+	color: var(--lock-muted);
+}
+#relationshipLock .lock-progress b {
+	display: block;
+	font-size: clamp(18px, 5vw, 24px);
+	color: #fff5f9;
+	font-variant-numeric: tabular-nums;
+}
+#relationshipLock .lock-progress-item { display: grid; gap: 3px; }
+
+#relationshipLock .lock-months {
+	display: grid;
+	gap: clamp(12px, 2.6vw, 20px);
+}
+
+#relationshipLock .lock-month {
+	border: 1px solid var(--lock-line);
+	border-radius: 18px;
+	background: linear-gradient(180deg, rgba(24, 15, 28, .5), rgba(12, 9, 17, .42));
+	overflow: hidden;
+}
+#relationshipLock .lock-month-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 10px;
+	width: 100%;
+	min-height: 52px;
+	padding: 12px 18px;
+	border: 0;
+	color: var(--lock-ink);
+	background: transparent;
+	font: inherit;
+	font-weight: 700;
+	font-size: clamp(13px, 3.6vw, 15px);
+	letter-spacing: .06em;
+	cursor: pointer;
+	text-align: start;
+}
+#relationshipLock .lock-month-head:hover { background: rgba(255, 255, 255, .04); }
+#relationshipLock .lock-month-head:focus-visible { outline: 2px solid rgba(255, 170, 200, .6); outline-offset: -3px; }
+#relationshipLock .lock-month-meta { display: inline-flex; align-items: center; gap: 10px; color: var(--lock-muted); font-weight: 500; font-size: clamp(11px, 3vw, 13px); }
+#relationshipLock .lock-month-caret { transition: transform .3s var(--lock-ease); }
+#relationshipLock .lock-month.is-open .lock-month-caret { transform: rotate(90deg); }
+
+#relationshipLock .lock-month-days {
+	display: none;
+	padding: 4px 16px 18px;
+}
+#relationshipLock .lock-month.is-open .lock-month-days { display: block; }
+
+/* Journey line (horizontal on desktop, vertical on mobile). */
+#relationshipLock .lock-line-wrap {
+	position: relative;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 10px;
+	padding: 12px 2px;
+}
+
+#relationshipLock .lock-day {
+	position: relative;
+	display: grid;
+	place-items: center;
+	width: 42px;
+	height: 42px;
+	padding: 0;
+	border: 1px solid var(--lock-line);
+	border-radius: 50%;
+	color: var(--lock-muted);
+	background: rgba(255, 255, 255, .04);
+	font: inherit;
+	font-size: 13px;
+	font-weight: 700;
+	cursor: pointer;
+	transition: transform .22s var(--lock-ease), border-color .22s var(--lock-ease), background .22s var(--lock-ease), box-shadow .22s var(--lock-ease);
+}
+#relationshipLock .lock-day:hover,
+#relationshipLock .lock-day:focus-visible { transform: translateY(-3px) scale(1.05); border-color: rgba(255, 170, 200, .5); outline: none; }
+
+#relationshipLock .lock-day.is-complete {
+	border-color: rgba(255, 150, 190, .7);
+	color: #fff;
+	background: linear-gradient(135deg, rgba(255, 122, 169, .3), rgba(185, 140, 255, .2));
+	box-shadow: 0 0 18px rgba(255, 110, 160, .45);
+}
+#relationshipLock .lock-day.is-partial {
+	border-color: rgba(255, 190, 215, .45);
+	color: #ffe3ee;
+	background: rgba(255, 150, 190, .12);
+}
+#relationshipLock .lock-day.is-unanswered {
+	opacity: .72;
+}
+#relationshipLock .lock-day.is-future {
+	opacity: .34;
+	cursor: default;
+	border-style: dashed;
+}
+#relationshipLock .lock-day.is-future:hover { transform: none; }
+
+#relationshipLock .lock-day.is-today {
+	border-color: rgba(255, 190, 215, .95);
+	color: #fff;
+	box-shadow: 0 0 0 3px rgba(255, 122, 169, .22), 0 0 26px rgba(255, 110, 160, .55);
+	transform: scale(1.06);
+}
+#relationshipLock .lock-day.is-today::after {
+	content: "";
+	position: absolute;
+	inset: -6px;
+	border-radius: 50%;
+	border: 1px solid rgba(255, 160, 195, .5);
+	animation: lockTodayRing 2.6s ease-out infinite;
+	pointer-events: none;
+}
+@keyframes lockTodayRing {
+	0%   { transform: scale(.85); opacity: .7; }
+	100% { transform: scale(1.5); opacity: 0; }
+}
+#relationshipLock .lock-day.is-just-completed {
+	animation: lockDayComplete .9s var(--lock-ease) both;
+}
+@keyframes lockDayComplete {
+	0%   { transform: scale(1); }
+	45%  { transform: scale(1.28); box-shadow: 0 0 34px rgba(255, 140, 185, .8); }
+	100% { transform: scale(1); }
+}
+#relationshipLock .lock-day-dot {
+	position: absolute;
+	inset-inline-end: 4px;
+	inset-block-start: 4px;
+	width: 7px;
+	height: 7px;
+	border-radius: 50%;
+	background: var(--lock-rose);
+	box-shadow: 0 0 10px rgba(255, 122, 169, .9);
+}
+
+/* ============================================================
+   SECTION 6 — DAY DETAIL PANEL
+   ============================================================ */
+
+#relationshipLock .lock-day-panel {
+	position: fixed;
+	z-index: 80;
+	inset-inline: 0;
+	bottom: 0;
+	max-height: 82svh;
+	overflow-y: auto;
+	padding: clamp(20px, 5vw, 30px) clamp(18px, 5vw, 34px) max(26px, env(safe-area-inset-bottom));
+	border-top: 1px solid var(--lock-line);
+	border-radius: 24px 24px 0 0;
+	background: linear-gradient(180deg, rgba(30, 18, 34, .97), rgba(12, 9, 17, .99));
+	box-shadow: 0 -22px 60px rgba(0, 0, 0, .5);
+	backdrop-filter: blur(14px);
+	-webkit-backdrop-filter: blur(14px);
+	transform: translateY(102%);
+	transition: transform .5s var(--lock-ease);
+	/* Closed panels must NEVER intercept taps on the page beneath. */
+	pointer-events: none;
+	visibility: hidden;
+}
+#relationshipLock .lock-day-panel.is-open {
+	transform: translateY(0);
+	pointer-events: auto;
+	visibility: visible;
+}
+
+#relationshipLock .lock-day-backdrop {
+	position: fixed;
+	z-index: 70;
+	inset: 0;
+	background: rgba(3, 3, 8, .58);
+	opacity: 0;
+	pointer-events: none;
+	transition: opacity .4s ease;
+}
+#relationshipLock .lock-day-backdrop.is-open { opacity: 1; pointer-events: auto; }
+
+#relationshipLock .lock-day-panel-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	margin-bottom: clamp(16px, 3.4vw, 24px);
+}
+#relationshipLock .lock-day-panel-title { font-size: clamp(16px, 4.4vw, 21px); font-weight: 700; color: #fff; }
+#relationshipLock .lock-day-panel-date { display: block; margin-top: 4px; font-size: clamp(12px, 3.2vw, 14px); color: var(--lock-muted); }
+#relationshipLock .lock-day-panel-close {
+	width: 42px;
+	height: 42px;
+	padding: 0;
+	border: 1px solid var(--lock-line);
+	border-radius: 50%;
+	color: var(--lock-ink);
+	background: rgba(255, 255, 255, .06);
+	font-size: 22px;
+	cursor: pointer;
+	transition: background .2s ease, border-color .2s ease;
+}
+#relationshipLock .lock-day-panel-close:hover { background: rgba(255, 255, 255, .12); border-color: rgba(255, 170, 200, .5); }
+#relationshipLock .lock-day-panel-close:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+#relationshipLock .lock-day-entries { display: grid; gap: clamp(12px, 3vw, 16px); }
+#relationshipLock .lock-day-entry {
+	display: grid;
+	gap: 6px;
+	padding: clamp(14px, 3.4vw, 20px);
+	border: 1px solid var(--lock-line);
+	border-radius: 16px;
+	background: rgba(255, 255, 255, .035);
+	opacity: 0;
+	transform: translate3d(0, 14px, 0);
+	filter: blur(6px);
+	transition: opacity .7s var(--lock-ease), transform .7s var(--lock-ease), filter .7s var(--lock-ease);
+}
+#relationshipLock .lock-day-entry.is-shown { opacity: 1; transform: none; filter: blur(0); }
+#relationshipLock .lock-day-entry-name { font-weight: 700; color: var(--lock-rose); font-size: clamp(13px, 3.6vw, 15px); }
+#relationshipLock .lock-day-entry-answer { font-size: clamp(15px, 4.2vw, 18px); color: #ffeef5; line-height: 1.8; }
+#relationshipLock .lock-day-entry-answer.is-empty { color: var(--lock-muted); font-style: italic; }
+
+/* ============================================================
+   FOOTER / CONTROLS inside the lock
+   ============================================================ */
+
+#relationshipLock .lock-footer {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	gap: 12px;
+	width: 100%;
+	margin-top: clamp(10px, 3vh, 30px);
+	padding-top: clamp(18px, 3vw, 28px);
+	border-top: 1px solid rgba(255, 160, 195, .1);
+}
+#relationshipLock .lock-footer button {
+	min-height: 46px;
+	padding: 11px 20px;
+	border: 1px solid var(--lock-line);
+	border-radius: 999px;
+	color: var(--lock-ink);
+	background: rgba(255, 255, 255, .05);
+	font: inherit;
+	font-weight: 600;
+	font-size: clamp(13px, 3.4vw, 15px);
+	cursor: pointer;
+	transition: transform .18s var(--lock-ease), border-color .18s ease, background .18s ease;
+}
+#relationshipLock .lock-footer button:hover,
+#relationshipLock .lock-footer button:focus-visible {
+	border-color: rgba(255, 180, 210, .6);
+	background: rgba(255, 255, 255, .1);
+	transform: translateY(-1px);
+	outline: none;
+}
+#relationshipLock .lock-footer button:disabled { opacity: .55; cursor: default; }
+
+#relationshipLock .lock-footnote {
+	margin: 18px 0 0;
+	font-size: 11px;
+	color: rgba(180, 165, 185, .55);
+	letter-spacing: .04em;
+}
+
+/* ============================================================
+   RESPONSIVE — MOBILE FIRST-CLASS
+   ============================================================ */
+
+/* Mobile: journey stays a clean wrap of circular markers (no overflow). */
+@media (max-width: 620px) {
+	#relationshipLock .lock-countdown { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+	#relationshipLock .lock-countdown .lock-count-cell:nth-child(4),
+	#relationshipLock .lock-countdown .lock-count-cell:nth-child(5) { grid-column: span 1; }
+	#relationshipLock .lock-content { gap: clamp(26px, 6vw, 40px); }
+	#relationshipLock .lock-line-wrap { gap: 8px; }
+	#relationshipLock .lock-day { width: 40px; height: 40px; font-size: 12px; }
+	#relationshipLock .lock-day-panel { border-radius: 22px 22px 0 0; }
+}
+
+/* Very narrow phones: 2+2+1 so five cards never become unreadable slivers. */
+@media (max-width: 400px) {
+	#relationshipLock .lock-countdown { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+	#relationshipLock .lock-countdown .lock-count-cell:last-child { grid-column: 1 / -1; }
+}
+
+/* Short landscape phones */
+@media (max-height: 520px) and (orientation: landscape) {
+	#relationshipLock .lock-content { gap: 22px; padding-block: 22px 40px; }
+	#relationshipLock .lock-message { margin-top: 4px; }
+}
+
+/* Tablet */
+@media (min-width: 621px) and (max-width: 1023px) {
+	#relationshipLock .lock-day { width: 46px; height: 46px; }
+}
+
+/* Desktop day detail: centered panel instead of a bottom sheet. */
+@media (min-width: 900px) {
+	#relationshipLock .lock-day-panel {
+		inset: 0;
+		width: min(560px, 92vw);
+		max-height: none;
+		margin: auto;
+		border: 1px solid var(--lock-line);
+		border-radius: 24px;
+		transform: translateY(20px) scale(.98);
+		opacity: 0;
+		pointer-events: none;
+		visibility: hidden;
+		transition: transform .45s var(--lock-ease), opacity .45s var(--lock-ease);
+	}
+	#relationshipLock .lock-day-panel.is-open {
+		transform: none;
+		opacity: 1;
+		pointer-events: auto;
+		visibility: visible;
+	}
+
+	#relationshipLock .lock-day { width: 48px; height: 48px; font-size: 14px; }
+	#relationshipLock .lock-count-cell { padding: 26px 16px; }
+}
+
+/* Large desktop: richer breathing room, more depth. */
+@media (min-width: 1440px) {
+	#relationshipLock .lock-content { width: min(100%, 1020px); }
+	#relationshipLock .lock-message { max-width: 840px; }
+	#relationshipLock .lock-message-text { font-size: clamp(22px, 1.6vw, 27px); line-height: 2.1; }
+	#relationshipLock .lock-day { width: 52px; height: 52px; }
+}
+
+/* ============================================================
+   REDUCED MOTION — still polished, motion minimised
+   ============================================================ */
+
+@media (prefers-reduced-motion: reduce) {
+	#relationshipLock *,
+	#relationshipLock *::before,
+	#relationshipLock *::after {
+		animation-duration: .01ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: .35s !important;
+	}
+
+	#relationshipLock .lock-glow { animation: none; opacity: .8; }
+	#relationshipLock .lock-particles,
+	#relationshipLock .lock-day.is-today::after { display: none; }
+
+	#relationshipLock .lock-phrase {
+		transform: none !important;
+		filter: none !important;
+		transition: opacity .8s ease !important;
+	}
+	#relationshipLock .lock-heart-mark { transform: none !important; }
+	#relationshipLock .lock-heart-mark span { animation: none !important; }
+	#relationshipLock .lock-day-entry { transform: none !important; filter: none !important; }
+	#relationshipLock .lock-message.is-swept::after { display: none; }
+
+	/* New components: keep them all settled and readable, no motion. */
+	#relationshipLock .lock-section {
+		opacity: 1 !important;
+		transform: none !important;
+		transition: none !important;
+	}
+	#relationshipLock .lock-subtitle,
+	#relationshipLock .lock-note-btn,
+	#relationshipLock .lock-note-text {
+		opacity: 1 !important;
+		transform: none !important;
+		filter: none !important;
+		transition: opacity .4s ease !important;
+	}
+	#relationshipLock .lock-note-btn { opacity: 1 !important; }
+	#relationshipLock .lock-count-cell::after { display: none; }
+	#relationshipLock .lock-option { animation: none !important; opacity: 1 !important; transform: none !important; }
+}

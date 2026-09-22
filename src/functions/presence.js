@@ -1,37 +1,39 @@
 const { app } = require("@azure/functions");
-const { CosmosClient } = require("@azure/cosmos");
-
-const client = new CosmosClient({
-  endpoint: process.env.COSMOS_ENDPOINT,
-  key: process.env.COSMOS_KEY
-});
-
-const database = client.database(process.env.COSMOS_DATABASE);
-const container = database.container(process.env.COSMOS_CONTAINER);
+const {
+  container,
+  requireSessionAndUnlocked,
+  serverError,
+  corsHeaders
+} = require("./shared");
 
 const KNOWN_USERS = ["Mohamed", "Yomna"];
 const KNOWN_PERSONS = ["mohamed", "yomna"];
 
+/* Presence, typing, status and reactions are ALL part of the chat
+   experience, so every handler here requires:
+     1) a trusted session, AND
+     2) an unlocked relationship.
+   Identity is ALWAYS taken from the trusted session — never from
+   body.user / body.person / any client-supplied identity. */
+
 app.http("setPresence", {
-  methods: ["POST"],
+  methods: ["POST", "OPTIONS"],
   authLevel: "anonymous",
 
   handler: async (request, context) => {
-    try {
-      const body = await request.json();
+    if (request.method === "OPTIONS") {
+      return { status: 204, headers: corsHeaders(request) };
+    }
 
-      if (!body.user) {
-        return {
-          status: 400,
-          jsonBody: {
-            success: false,
-            error: "user is required"
-          }
-        };
-      }
+    const gate = await requireSessionAndUnlocked(request);
+    if (!gate.ok) return gate.response;
+
+    try {
+      const body = await request.json().catch(() => ({}));
 
       const now = Date.now();
-      const user = String(body.user);
+      // Trusted identity from the session — the client cannot set it.
+      const user = gate.user;
 
       const item = {
         id: `presence:${user}`,
@@ -52,51 +54,39 @@ app.http("setPresence", {
         }
       };
     } catch (error) {
-      context.error("Set presence error:", error);
-
-      return {
-        status: 500,
-        jsonBody: {
-          success: false,
-          error: error.message
-        }
-      };
+      return serverError(request, context, error, "Unable to update presence");
     }
   }
 });
 
 app.http("setTyping", {
-  methods: ["POST"],
+  methods: ["POST", "OPTIONS"],
   authLevel: "anonymous",
 
   handler: async (request, context) => {
-    try {
-      const body = await request.json();
+    if (request.method === "OPTIONS") {
+      return { status: 204, headers: corsHeaders(request) };
+    }
 
-      if (!body.user) {
-        return {
-          status: 400,
-          jsonBody: {
-            success: false,
-            error: "user is required"
-          }
-        };
-      }
+    const gate = await requireSessionAndUnlocked(request);
+    if (!gate.ok) return gate.response;
+
+    try {
+      const body = await request.json().catch(() => ({}));
 
       if (body.typing === undefined) {
         return {
           status: 400,
-          jsonBody: {
-            success: false,
-            error: "typing is required"
-          }
+          jsonBody: { success: false, error: "typing is required" }
         };
       }
 
+      const user = gate.user;
+
       const item = {
-        id: `typing:${body.user}`,
+        id: `typing:${user}`,
         type: "typing",
-        user: String(body.user),
+        user,
         typing: !!body.typing,
         updatedAt: Date.now()
       };
@@ -111,54 +101,43 @@ app.http("setTyping", {
         }
       };
     } catch (error) {
-      context.error("Set typing error:", error);
-
-      return {
-        status: 500,
-        jsonBody: {
-          success: false,
-          error: error.message
-        }
-      };
+      return serverError(request, context, error, "Unable to update typing");
     }
   }
 });
 
 app.http("setStatus", {
-  methods: ["POST"],
+  methods: ["POST", "OPTIONS"],
   authLevel: "anonymous",
 
   handler: async (request, context) => {
-    try {
-      const body = await request.json();
+    if (request.method === "OPTIONS") {
+      return { status: 204, headers: corsHeaders(request) };
+    }
 
-      if (!body.person) {
-        return {
-          status: 400,
-          jsonBody: {
-            success: false,
-            error: "person is required"
-          }
-        };
-      }
+    const gate = await requireSessionAndUnlocked(request);
+    if (!gate.ok) return gate.response;
+
+    try {
+      const body = await request.json().catch(() => ({}));
 
       if (!body.status) {
         return {
           status: 400,
-          jsonBody: {
-            success: false,
-            error: "status is required"
-          }
+          jsonBody: { success: false, error: "status is required" }
         };
       }
 
-      const person = String(body.person).toLowerCase();
+      // The person whose status is written is derived from the session,
+      // so a client can never overwrite the other person's status.
+      const person = String(gate.user).toLowerCase();
+
       const item = {
         id: `status:${person}`,
         type: "status",
         person,
         status: String(body.status),
-        time: body.time || new Date().toLocaleString(),
+        time: new Date().toLocaleString(),
         updatedAt: Date.now()
       };
 
@@ -172,35 +151,28 @@ app.http("setStatus", {
         }
       };
     } catch (error) {
-      context.error("Set status error:", error);
-
-      return {
-        status: 500,
-        jsonBody: {
-          success: false,
-          error: error.message
-        }
-      };
+      return serverError(request, context, error, "Unable to update status");
     }
   }
 });
 
 app.http("getPresence", {
-  methods: ["GET"],
+  methods: ["GET", "OPTIONS"],
   authLevel: "anonymous",
 
   handler: async (request, context) => {
+    if (request.method === "OPTIONS") {
+      return { status: 204, headers: corsHeaders(request) };
+    }
+
+    const gate = await requireSessionAndUnlocked(request);
+    if (!gate.ok) return gate.response;
+
     try {
-      const usersParam = request.query.get("users");
-      const personsParam = request.query.get("persons");
-
-      const users = usersParam
-        ? usersParam.split(",").map((x) => x.trim()).filter(Boolean)
-        : KNOWN_USERS;
-
-      const persons = personsParam
-        ? personsParam.split(",").map((x) => x.trim().toLowerCase()).filter(Boolean)
-        : KNOWN_PERSONS;
+      // The known-user set is fixed by the server; client query values for
+      // arbitrary users/persons are ignored so presence cannot be probed.
+      const users = KNOWN_USERS;
+      const persons = KNOWN_PERSONS;
 
       const [presenceResult, typingResult, statusResult] = await Promise.all([
         container.items.query({
@@ -254,44 +226,37 @@ app.http("getPresence", {
         }
       };
     } catch (error) {
-      context.error("Get presence error:", error);
-
-      return {
-        status: 500,
-        jsonBody: {
-          success: false,
-          error: error.message
-        }
-      };
+      return serverError(request, context, error, "Unable to load presence");
     }
   }
 });
 
 app.http("reactMessage", {
-  methods: ["POST"],
+  methods: ["POST", "OPTIONS"],
   authLevel: "anonymous",
 
   handler: async (request, context) => {
+    if (request.method === "OPTIONS") {
+      return { status: 204, headers: corsHeaders(request) };
+    }
+
+    const gate = await requireSessionAndUnlocked(request);
+    if (!gate.ok) return gate.response;
+
     try {
-      const body = await request.json();
+      const body = await request.json().catch(() => ({}));
 
       if (!body.messageId) {
         return {
           status: 400,
-          jsonBody: {
-            success: false,
-            error: "messageId is required"
-          }
+          jsonBody: { success: false, error: "messageId is required" }
         };
       }
 
       if (body.emoji === undefined) {
         return {
           status: 400,
-          jsonBody: {
-            success: false,
-            error: "emoji is required"
-          }
+          jsonBody: { success: false, error: "emoji is required" }
         };
       }
 
@@ -300,15 +265,14 @@ app.http("reactMessage", {
       if (!resource) {
         return {
           status: 404,
-          jsonBody: {
-            success: false,
-            error: "message not found"
-          }
+          jsonBody: { success: false, error: "message not found" }
         };
       }
 
       resource.reaction = String(body.emoji);
       resource.reactionUpdatedAt = Date.now();
+      // Record WHO reacted, derived from the session (never the body).
+      resource.reactionBy = gate.user;
 
       const { resource: updated } = await container.item(String(body.messageId), "chat").replace(resource);
 
@@ -320,15 +284,7 @@ app.http("reactMessage", {
         }
       };
     } catch (error) {
-      context.error("React message error:", error);
-
-      return {
-        status: 500,
-        jsonBody: {
-          success: false,
-          error: error.message
-        }
-      };
+      return serverError(request, context, error, "Unable to react to message");
     }
   }
 });

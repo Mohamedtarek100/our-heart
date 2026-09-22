@@ -377,20 +377,27 @@
 }
 
 /* --- "ملاحظة" note button (small secondary control) --- */
+#relationshipLock .lock-notes {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	align-items: stretch;
+	gap: clamp(10px, 2.4vw, 16px);
+	margin-top: clamp(16px, 3vw, 22px);
+}
+
 #relationshipLock .lock-note-btn {
 	display: inline-flex;
+	flex-direction: column;
 	align-items: center;
-	gap: 8px;
-	min-height: 42px;
-	margin-top: clamp(16px, 3vw, 22px);
-	padding: 9px 18px;
+	gap: 3px;
+	min-height: 44px;
+	padding: 10px 20px;
 	border: 1px solid var(--lock-line);
-	border-radius: 999px;
+	border-radius: 18px;
 	color: var(--lock-ink);
 	background: linear-gradient(135deg, rgba(255, 122, 169, .12), rgba(185, 140, 255, .08));
 	font: inherit;
-	font-size: clamp(13px, 3.6vw, 15px);
-	font-weight: 600;
 	cursor: pointer;
 	opacity: 0;
 	transform: translate3d(0, 10px, 0);
@@ -403,7 +410,7 @@
 	border-color: rgba(255, 180, 210, .6);
 	background: linear-gradient(135deg, rgba(255, 122, 169, .22), rgba(185, 140, 255, .14));
 	box-shadow: 0 12px 30px rgba(255, 90, 150, .22);
-	transform: translateY(-1px);
+	transform: translateY(-2px);
 	outline: none;
 }
 #relationshipLock .lock-note-btn:active { transform: translateY(1px) scale(.98); }
@@ -411,7 +418,27 @@
 	border-color: rgba(255, 190, 215, .9);
 	box-shadow: 0 0 0 3px rgba(255, 122, 169, .18);
 }
+#relationshipLock .lock-note-label {
+	display: inline-flex;
+	align-items: center;
+	gap: 7px;
+	font-size: clamp(13px, 3.6vw, 15px);
+	font-weight: 600;
+}
 #relationshipLock .lock-note-icon { font-size: 1.15em; line-height: 1; color: var(--lock-rose); }
+/* Playful helper under "ملاحظة" — deliberately smaller than the message. */
+#relationshipLock .lock-note-hint {
+	font-size: clamp(10px, 2.8vw, 11px);
+	font-weight: 500;
+	color: rgba(255, 200, 220, .62);
+	letter-spacing: .01em;
+}
+
+/* The second surprise reads as a distinct, slightly softer control. */
+#relationshipLock .lock-note-btn--alt {
+	background: linear-gradient(135deg, rgba(185, 140, 255, .12), rgba(255, 122, 169, .08));
+}
+#relationshipLock .lock-note-btn--alt .lock-note-icon { color: var(--lock-violet); }
 
 /* --- Private note panel --- */
 #relationshipLock .lock-note-backdrop {
@@ -495,6 +522,61 @@
 	opacity: 1;
 	filter: blur(0);
 	transform: none;
+}
+
+/* --- Presence strip (real server data, part of the lock scene) --- */
+#relationshipLock .lock-presence {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	gap: clamp(10px, 3vw, 26px);
+	width: 100%;
+	margin-top: clamp(16px, 3vw, 24px);
+	padding: clamp(11px, 2.6vw, 15px) clamp(14px, 4vw, 22px);
+	border: 1px solid var(--lock-line);
+	border-radius: 999px;
+	background: rgba(22, 14, 26, .42);
+	backdrop-filter: blur(8px);
+	-webkit-backdrop-filter: blur(8px);
+}
+#relationshipLock .lock-presence-item {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	font-size: clamp(11px, 3vw, 13px);
+	color: var(--lock-muted);
+}
+#relationshipLock .lock-presence-dot {
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	background: rgba(200, 180, 200, .5);
+	transition: background .4s ease, box-shadow .4s ease;
+}
+#relationshipLock .lock-presence-item.is-online .lock-presence-dot {
+	background: #52d98a;
+	box-shadow: 0 0 10px rgba(82, 217, 138, .85);
+}
+#relationshipLock .lock-presence-item.is-online .lock-presence-text { color: #86e6ac; }
+#relationshipLock .lock-presence-user { color: #ffe4ee; font-weight: 600; }
+#relationshipLock .lock-presence-text { transition: color .4s ease; }
+
+/* --- Second surprise panel: distinct sparkle treatment --- */
+#relationshipLock .lock-note-panel--surprise {
+	background: linear-gradient(180deg, rgba(40, 26, 52, .97), rgba(14, 10, 22, .99));
+}
+#relationshipLock .lock-note-sparkle {
+	color: var(--lock-violet);
+	filter: drop-shadow(0 0 22px rgba(185, 140, 255, .8));
+	animation: surpriseSparkle 3.2s ease-in-out infinite;
+}
+@keyframes surpriseSparkle {
+	0%, 100% { transform: scale(1) rotate(0deg); opacity: .85; }
+	50%      { transform: scale(1.18) rotate(12deg); opacity: 1; }
+}
+#relationshipLock .lock-note-text--surprise {
+	color: #f3e6ff;
+	text-shadow: 0 0 26px rgba(185, 140, 255, .5);
 }
 
 /* ============================================================
@@ -1219,4 +1301,5 @@
 	#relationshipLock .lock-note-btn { opacity: 1 !important; }
 	#relationshipLock .lock-count-cell::after { display: none; }
 	#relationshipLock .lock-option { animation: none !important; opacity: 1 !important; transform: none !important; }
+	#relationshipLock .lock-note-sparkle { animation: none !important; }
 }

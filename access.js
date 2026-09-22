@@ -26,9 +26,9 @@
 
 const API_BASE = "https://ourheartfunctions2026.azurewebsites.net/api";
 
-const ACCESS_VERSION = "5.1";
+const ACCESS_VERSION = "5.2";
 const INTRO_VERSION = "7";
-const LOCK_VERSION = "3";
+const LOCK_VERSION = "4";
 
 /* Set to true only for a brand-new successful login; consumed once so a
    trusted page reload never autoplays the Intro. */
@@ -345,23 +345,27 @@ let pendingProvisional = null;
 let pendingProvisionalExpiresAt = 0;
 let pendingPresence = null;
 
-/* Formats a presence summary entry into a WhatsApp-like status line.
-   Real server data only — never fabricated on the client. */
+/* Formats a server presence entry into an elegant status line. The online
+   flag and the day offset are BOTH decided by the server (heartbeat
+   freshness against server time / application timezone), so the device
+   clock can never change what is shown. Real data only — never fabricated. */
 function formatPresence(entry) {
   if (!entry) return { text: "", online: false };
+  if (entry.online) return { text: "Online", online: true };
 
-  const ONLINE_WINDOW_MS = 45 * 1000;
   const lastSeen = Number(entry.lastSeen) || 0;
-  const isFresh = lastSeen > 0 && (Date.now() - lastSeen) < ONLINE_WINDOW_MS;
+  if (!lastSeen) return { text: "Offline", online: false };
 
-  if (entry.online && isFresh) return { text: "Online", online: true };
+  const time = new Date(lastSeen).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
-  if (lastSeen > 0) {
-    const time = new Date(lastSeen).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-    return { text: `Last seen today at ${time}`, online: false };
-  }
+  if (entry.dayOffset === 0) return { text: `Last seen today at ${time}`, online: false };
+  if (entry.dayOffset === 1) return { text: `Last seen yesterday at ${time}`, online: false };
 
-  return { text: "Offline", online: false };
+  const d = new Date(lastSeen);
+  const dd = String(d.getDate()).padStart(2, "0");
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const yyyy = d.getFullYear();
+  return { text: `Last seen ${dd}/${mm}/${yyyy} at ${time}`, online: false };
 }
 
 async function goToAccountSelection(provisional, expiresAt, presence) {
@@ -392,7 +396,7 @@ function mountAccountSelection() {
   wrap.innerHTML = `
     <div class="accessCard accountCard">
       <div class="accessHeart">❤️</div>
-      <h1>مين اللي بيكلمني؟</h1>
+      <h1>Choose your account</h1>
       <p class="accessSubtitle">اختر حسابك لتكمّل</p>
 
       <div class="accountOptions" role="radiogroup" aria-label="Choose your account">
@@ -417,6 +421,40 @@ function mountAccountSelection() {
   const status = wrap.querySelector("#accountStatus");
   const options = [...wrap.querySelectorAll(".accountOption")];
   let submitting = false;
+
+  // Live presence poll while choosing: keeps both status lines fresh even
+  // though the user has not established a session yet. Real server data.
+  const paintPresence = (summary) => {
+    if (!summary) return;
+    options.forEach((option) => {
+      const user = option.dataset.user;
+      const state = formatPresence(summary[user]);
+      const el = option.querySelector(".accountOptionStatus");
+      if (!el) return;
+      if (el.textContent !== state.text) el.textContent = state.text;
+      el.classList.toggle("is-online", state.online);
+    });
+  };
+
+  paintPresence(pendingPresence);
+
+  const presencePoll = setInterval(async () => {
+    if (document.hidden || submitting) return;
+    try {
+      const response = await fetch(`${API_BASE}/getPresenceSummary`, {
+        credentials: "include",
+        cache: "no-store"
+      });
+      if (!response.ok) return;
+      paintPresence(await response.json());
+    } catch {
+      /* best effort */
+    }
+  }, 15000);
+
+  // Stop polling as soon as we leave this stage.
+  const stopPresencePoll = () => clearInterval(presencePoll);
+  wrap._stopPresencePoll = stopPresencePoll;
 
   async function chooseAccount(user, button) {
     if (submitting) return;
@@ -467,6 +505,7 @@ function mountAccountSelection() {
 }
 
 function unmountAccountSelection() {
+  accessGateMount?.querySelector("#accountSelection")?._stopPresencePoll?.();
   if (accessGateMount) accessGateMount.replaceChildren();
 }
 

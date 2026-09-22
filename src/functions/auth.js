@@ -44,6 +44,7 @@ const {
   loadProvisional,
   consumeProvisional,
   loadPresenceSummary,
+  touchPresence,
   json,
   badRequest,
   serverError,
@@ -160,6 +161,20 @@ function buildState(user) {
     }));
   }
 
+  return state;
+}
+
+/* Presence is only attached for a TRUSTED user, so nothing about the other
+   person is ever exposed before authentication. */
+async function buildTrustedState(user) {
+  const state = buildState(user);
+  if (user) {
+    try {
+      state.presence = await loadPresenceSummary();
+    } catch {
+      /* best effort — never block auth on presence */
+    }
+  }
   return state;
 }
 
@@ -382,7 +397,15 @@ app.http("login", {
         Math.floor(sessionTtlMs() / 1000)
       );
 
-      return json(request, 200, buildState(requestedUser), {
+      // Mark the chosen account ONLINE immediately — do not wait for the
+      // first heartbeat tick. lastSeen is the server's own timestamp.
+      try {
+        await touchPresence(requestedUser, { online: true });
+      } catch {
+        /* presence must never block a successful login */
+      }
+
+      return json(request, 200, await buildTrustedState(requestedUser), {
         "Set-Cookie": cookie
       });
     } catch (error) {
@@ -410,7 +433,16 @@ app.http("logout", {
       const session = await loadSession(cookies[SESSION_COOKIE]);
 
       // Revoke server-side FIRST so a copied cookie is dead immediately.
-      if (session) await revokeSession(session);
+      if (session) {
+        // Best-effort: reflect the departure immediately. Heartbeat expiry
+        // remains the authoritative fallback if this never arrives.
+        try {
+          await touchPresence(session.user, { online: false });
+        } catch {
+          /* ignore */
+        }
+        await revokeSession(session);
+      }
 
       return json(
         request,
@@ -459,7 +491,7 @@ app.http("session", {
         ? {}
         : { "Set-Cookie": clearSessionCookie(request) };
 
-      return json(request, 200, buildState(user), headers);
+      return json(request, 200, await buildTrustedState(user), headers);
     } catch (error) {
       // Fail CLOSED: on any error report "not authenticated" and keep the
       // lock state as configured rather than guessing.

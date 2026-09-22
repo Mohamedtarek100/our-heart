@@ -589,37 +589,108 @@ async function requireSessionAndUnlocked(request) {
 }
 
 /* ------------------------------------------------------------------ */
-/* Presence summary (for the account-selection step)                   */
+/* Presence                                                            */
 /* ------------------------------------------------------------------ */
+
+/* How long a heartbeat is considered "still online". A user counts as
+   ONLINE when the server has seen activity within this window. This is
+   the SINGLE source of truth for online state — never the browser clock,
+   and never a client-supplied flag. */
+const PRESENCE_ONLINE_WINDOW_MS = 60 * 1000;
+
+/* Deterministic document id — one record per person, so a heartbeat is an
+   upsert of the SAME document and can never create duplicates. */
+function presenceDocId(user) {
+  return `presence:${user}`;
+}
+
+/* Records activity for a trusted user. Server time is authoritative.
+   Returns the stored record (with the derived online flag). */
+async function touchPresence(user, options = {}) {
+  const { online = true, status = "" } = options;
+  const now = serverNow();
+
+  const item = {
+    id: presenceDocId(user),
+    type: "presence",
+    user,                              // trusted, from the session
+    online: !!online,
+    lastSeen: now,                     // server timestamp of last activity
+    lastActiveAt: now,
+    appDate: applicationDate(now),     // application-timezone day
+    appTimezone: APP_TIMEZONE,
+    status: String(status || ""),
+    updatedAt: now
+  };
+
+  await container.items.upsert(item);
+  return item;
+}
+
+/* Server-side view of one person's presence. `online` is DERIVED here
+   from heartbeat freshness against server time — a stale record is
+   reported offline even if it still says online:true. */
+function describePresence(user, record) {
+  const now = serverNow();
+  const lastSeen = Number(record?.lastSeen) || 0;
+  // Online only when the heartbeat is inside the window. A timestamp in the
+  // future (clock skew / tampering) is clamped to "not online" rather than
+  // being trusted, and writes always use serverNow() anyway.
+  const fresh = lastSeen > 0 && lastSeen <= now && (now - lastSeen) <= PRESENCE_ONLINE_WINDOW_MS;
+
+  return {
+    user,
+    online: !!(record?.online) && fresh,
+    lastSeen: lastSeen > 0 ? Math.min(lastSeen, now) : null,
+    appDate: record?.appDate || (lastSeen ? applicationDate(lastSeen) : null),
+    appTimezone: APP_TIMEZONE,
+    // Relative day label computed on the SERVER in the app timezone so the
+    // client never has to guess and the device clock cannot change it.
+    dayOffset: lastSeen ? applicationDayOffset(lastSeen) : null
+  };
+}
+
+/* 0 = today, 1 = yesterday, -1 = future/unknown, 2+ = older. */
+function applicationDayOffset(epochMs) {
+  const today = applicationDate(serverNow());
+  const that = applicationDate(epochMs);
+  if (today === that) return 0;
+  const t = parseApplicationDate(today);
+  const d = parseApplicationDate(that);
+  if (!t || !d) return 2;
+  const tMs = Date.UTC(t.year, t.month - 1, t.day);
+  const dMs = Date.UTC(d.year, d.month - 1, d.day);
+  const diffDays = Math.round((tMs - dMs) / 86400000);
+  if (diffDays === 1) return 1;
+  if (diffDays <= 0) return -1;
+  return 2;
+}
 
 /* Returns a small, safe presence summary for the two known people.
    This is ONLY used behind a valid Access Code (provisional stage) or a
    trusted session — never on a public endpoint. The client can never
-   fabricate it: the values come straight from the stored presence docs. */
+   fabricate it: the values come straight from the stored presence docs
+   and the online flag is decided by the server. */
 async function loadPresenceSummary() {
-  const summary = {
-    Mohamed: { online: false, lastSeen: 0 },
-    Yomna: { online: false, lastSeen: 0 }
-  };
+  const records = new Map();
 
   try {
     const { resources } = await container.items
       .query("SELECT * FROM c WHERE c.type = 'presence'")
       .fetchAll();
-
     resources.forEach((item) => {
-      if (isKnownUser(item.user)) {
-        summary[item.user] = {
-          online: !!item.online,
-          lastSeen: Number(item.lastSeen) || 0
-        };
-      }
+      if (isKnownUser(item.user)) records.set(item.user, item);
     });
   } catch {
     /* best effort — a missing summary must never break auth */
   }
 
-  return summary;
+  return {
+    Mohamed: describePresence("Mohamed", records.get("Mohamed")),
+    Yomna: describePresence("Yomna", records.get("Yomna")),
+    serverTime: serverNow(),
+    onlineWindowMs: PRESENCE_ONLINE_WINDOW_MS
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -677,6 +748,10 @@ module.exports = {
   securityHeaders,
   corsHeaders,
   isAllowedOrigin,
+  // presence
+  PRESENCE_ONLINE_WINDOW_MS,
+  touchPresence,
+  describePresence,
   loadPresenceSummary,
   json,
   unauthorized,

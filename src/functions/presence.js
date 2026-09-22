@@ -1,7 +1,11 @@
 const { app } = require("@azure/functions");
 const {
   container,
+  requireSession,
   requireSessionAndUnlocked,
+  touchPresence,
+  describePresence,
+  loadPresenceSummary,
   serverError,
   corsHeaders
 } = require("./shared");
@@ -9,13 +13,21 @@ const {
 const KNOWN_USERS = ["Mohamed", "Yomna"];
 const KNOWN_PERSONS = ["mohamed", "yomna"];
 
-/* Presence, typing, status and reactions are ALL part of the chat
-   experience, so every handler here requires:
-     1) a trusted session, AND
-     2) an unlocked relationship.
+/* Presence rules, split by purpose:
+
+   - HEARTBEAT (setPresence) requires a trusted session but is ALLOWED while
+     the Relationship Lock is enabled, because presence is PART OF the locked
+     experience (it shows on the account picker and the lock screen). Blocking
+     it would make "Last seen" permanently freeze.
+   - The chat-family operations (typing / reactions) remain gated behind the
+     lock, exactly as before.
+   - Reads (getPresence) require a trusted session and are also allowed while
+     locked, since the lock screen legitimately displays the partner's state.
+
    Identity is ALWAYS taken from the trusted session — never from
    body.user / body.person / any client-supplied identity. */
 
+/* --- HEARTBEAT ---------------------------------------------------- */
 app.http("setPresence", {
   methods: ["POST", "OPTIONS"],
   authLevel: "anonymous",
@@ -25,36 +37,56 @@ app.http("setPresence", {
       return { status: 204, headers: corsHeaders(request) };
     }
 
-    const gate = await requireSessionAndUnlocked(request);
+    // Trusted session required; NOT gated by the lock on purpose.
+    const gate = await requireSession(request);
     if (!gate.ok) return gate.response;
 
     try {
       const body = await request.json().catch(() => ({}));
 
-      const now = Date.now();
-      // Trusted identity from the session — the client cannot set it.
-      const user = gate.user;
-
-      const item = {
-        id: `presence:${user}`,
-        type: "presence",
-        user,
+      // The client may only say "I am online" / "I am leaving" and give a
+      // short status label. lastSeen is ALWAYS the server's own clock.
+      const item = await touchPresence(gate.user, {
         online: body.online !== undefined ? !!body.online : true,
-        lastSeen: typeof body.lastSeen === "number" ? body.lastSeen : now,
-        updatedAt: now
-      };
-
-      await container.items.upsert(item);
+        status: body.status
+      });
 
       return {
         status: 200,
         jsonBody: {
           success: true,
-          presence: item
+          presence: describePresence(gate.user, item),
+          serverTime: item.updatedAt
         }
       };
     } catch (error) {
       return serverError(request, context, error, "Unable to update presence");
+    }
+  }
+});
+
+/* --- PRESENCE READ (for the lock screen & account picker) ---------- */
+app.http("getPresenceSummary", {
+  methods: ["GET", "OPTIONS"],
+  authLevel: "anonymous",
+
+  handler: async (request, context) => {
+    if (request.method === "OPTIONS") {
+      return { status: 204, headers: corsHeaders(request) };
+    }
+
+    const gate = await requireSession(request);
+    if (!gate.ok) return gate.response;
+
+    try {
+      const summary = await loadPresenceSummary();
+      return {
+        status: 200,
+        headers: corsHeaders(request),
+        jsonBody: { success: true, ...summary }
+      };
+    } catch (error) {
+      return serverError(request, context, error, "Unable to load presence");
     }
   }
 });
@@ -194,11 +226,9 @@ app.http("getPresence", {
       const status = {};
 
       presenceResult.resources.forEach((item) => {
-        presence[item.user] = {
-          online: !!item.online,
-          lastSeen: item.lastSeen || 0,
-          updatedAt: item.updatedAt || 0
-        };
+        // Use the SAME server-derived online rule as everywhere else, so a
+        // stale document never reports as online.
+        presence[item.user] = describePresence(item.user, item);
       });
 
       typingResult.resources.forEach((item) => {

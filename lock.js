@@ -31,6 +31,9 @@ const MAIN_SUBTITLE = "بموت فيكي يا نونتي مليش غيرك";
 const NOTE_TEXT =
   "علفكره انا علطول كنت بحس انك بتحبيني احنا ملناش غير بعض يا عمري انا";
 
+/* The second, separate surprise ("مفاجأة صغيرة"). Verbatim. */
+const SURPRISE_TEXT = "انتي اعظم فنانه في حياتي";
+
 /* Split the message into natural phrases for a staggered reveal.
    This does NOT alter the wording: we split on sentence terminators while
    KEEPING the whitespace that follows, so join("") reconstructs
@@ -453,15 +456,37 @@ function buildShell() {
 
     <div class="lock-content">
 
-      <!-- 1. HEART / AMBIENT HEADER + MAIN MESSAGE + SUBTITLE + NOTE -->
+      <!-- 1. HEART / AMBIENT HEADER + MAIN MESSAGE + SUBTITLE + NOTES -->
       <section class="lock-message" aria-label="رسالة">
         <span class="lock-heart-mark"><span>❤️</span></span>
         <p class="lock-message-text">${phrasesHtml}</p>
         <p class="lock-subtitle">${escapeHtml(MAIN_SUBTITLE)}</p>
-        <button type="button" class="lock-note-btn" aria-label="افتحي الملاحظة">
-          <span class="lock-note-icon" aria-hidden="true">♡</span>
-          <span>ملاحظة</span>
-        </button>
+
+        <div class="lock-notes">
+          <button type="button" class="lock-note-btn" data-note="main" aria-label="افتحي الملاحظة">
+            <span class="lock-note-icon" aria-hidden="true">♡</span>
+            <span class="lock-note-label">ملاحظة</span>
+            <span class="lock-note-hint">اضغطي هنا شطورتي</span>
+          </button>
+          <button type="button" class="lock-note-btn lock-note-btn--alt" data-note="surprise" aria-label="افتحي المفاجأة">
+            <span class="lock-note-icon" aria-hidden="true">✦</span>
+            <span class="lock-note-label">مفاجأة صغيرة</span>
+          </button>
+        </div>
+      </section>
+
+      <!-- PRESENCE STRIP (real server data) -->
+      <section class="lock-presence" aria-label="الحالة">
+        <span class="lock-presence-item" data-user="Mohamed">
+          <span class="lock-presence-dot" aria-hidden="true"></span>
+          <span class="lock-presence-user">Mohamed</span>
+          <span class="lock-presence-text">…</span>
+        </span>
+        <span class="lock-presence-item" data-user="Yomna">
+          <span class="lock-presence-dot" aria-hidden="true"></span>
+          <span class="lock-presence-user">Yomna</span>
+          <span class="lock-presence-text">…</span>
+        </span>
       </section>
 
       <!-- 2. COUNTDOWN -->
@@ -525,13 +550,20 @@ function buildShell() {
       <p class="lock-footnote">مساحة خاصة لقلبين فقط ❤️</p>
     </div>
 
-    <!-- PRIVATE NOTE PANEL -->
+    <!-- PRIVATE NOTE PANELS (two distinct surprises) -->
     <div class="lock-note-backdrop"></div>
-    <div class="lock-note-panel" role="dialog" aria-modal="true" aria-label="ملاحظة خاصة" aria-hidden="true">
+    <div class="lock-note-panel" data-note-panel="main" role="dialog" aria-modal="true" aria-label="ملاحظة خاصة" aria-hidden="true">
       <button type="button" class="lock-note-close" aria-label="إغلاق الملاحظة">×</button>
       <div class="lock-note-inner">
         <span class="lock-note-heart" aria-hidden="true">♥</span>
         <p class="lock-note-text">${escapeHtml(NOTE_TEXT)}</p>
+      </div>
+    </div>
+    <div class="lock-note-panel lock-note-panel--surprise" data-note-panel="surprise" role="dialog" aria-modal="true" aria-label="مفاجأة" aria-hidden="true">
+      <button type="button" class="lock-note-close" aria-label="إغلاق">×</button>
+      <div class="lock-note-inner">
+        <span class="lock-note-heart lock-note-sparkle" aria-hidden="true">✦</span>
+        <p class="lock-note-text lock-note-text--surprise">${escapeHtml(SURPRISE_TEXT)}</p>
       </div>
     </div>
 
@@ -711,11 +743,52 @@ function renderQuestions(root, today, onAnswered, options = {}) {
 
 /* ---- today's status ---- */
 
+/* Formats a server presence entry into an elegant line. The online flag is
+   decided by the SERVER (heartbeat freshness); dayOffset is also computed
+   on the server in the app timezone, so the device clock cannot skew it. */
+function formatPresence(entry) {
+  if (!entry) return { text: "", online: false };
+  if (entry.online) return { text: "Online", online: true };
+
+  const lastSeen = Number(entry.lastSeen) || 0;
+  if (!lastSeen) return { text: "Offline", online: false };
+
+  const time = new Date(lastSeen).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+  if (entry.dayOffset === 0) return { text: `Last seen today at ${time}`, online: false };
+  if (entry.dayOffset === 1) return { text: `Last seen yesterday at ${time}`, online: false };
+
+  const d = new Date(lastSeen);
+  const dd = String(d.getDate()).padStart(2, "0");
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const yyyy = d.getFullYear();
+  return { text: `Last seen ${dd}/${mm}/${yyyy} at ${time}`, online: false };
+}
+
+/* Paints the server summary into the lock's presence strip. */
+function renderPresenceStatus(summary) {
+  if (!summary) return;
+  ["Mohamed", "Yomna"].forEach((user) => {
+    const item = document.querySelector(`.lock-presence-item[data-user="${user}"]`);
+    if (!item) return;
+    const state = formatPresence(summary[user]);
+    item.classList.toggle("is-online", state.online);
+    const textEl = item.querySelector(".lock-presence-text");
+    if (textEl && textEl.textContent !== state.text) textEl.textContent = state.text;
+  });
+}
+
 function renderTodayStatus(root, today) {
   const container = root.querySelector(".lock-today");
   if (!container) return;
   container.replaceChildren();
-  if (!today) return;
+  if (!today) {
+    const notice = document.createElement("p");
+    notice.className = "lock-questions-empty";
+    notice.textContent = "تعذر تحميل حالة اليوم، حاولي تحدّثي الصفحة.";
+    container.appendChild(notice);
+    return;
+  }
 
   const myAnswer = today.myAnswer || { answered: false };
   const partnerAnswer = today.partner || { answered: false };
@@ -751,45 +824,67 @@ function renderTodayStatus(root, today) {
 /* Private note panel                                                  */
 /* ------------------------------------------------------------------ */
 
-/* Cinematic "open a private note" interaction. The note text is fixed
-   (NOTE_TEXT) and rendered with a blur-to-sharp reveal. Closable by the
-   button, the backdrop, or Escape. */
+/* Cinematic "open a private note" interaction for the TWO notes. Each
+   button opens only its own panel; the texts are fixed (NOTE_TEXT /
+   SURPRISE_TEXT) and revealed blur-to-sharp. Closable by the button, the
+   × , the backdrop, or Escape. */
 function initNotePanel(root) {
-  const button = root.querySelector(".lock-note-btn");
-  const panel = root.querySelector(".lock-note-panel");
   const backdrop = root.querySelector(".lock-note-backdrop");
-  const closeBtn = root.querySelector(".lock-note-close");
-  const textEl = root.querySelector(".lock-note-text");
-  if (!button || !panel || !backdrop) return;
+  if (!backdrop) return;
 
-  const open = () => {
-    button.classList.add("is-active");
-    panel.classList.add("is-open");
-    backdrop.classList.add("is-open");
-    panel.setAttribute("aria-hidden", "false");
-    // Re-trigger the blur-to-sharp reveal each time it opens.
-    if (textEl) {
-      textEl.classList.remove("is-shown");
-      void textEl.offsetWidth;
-      requestAnimationFrame(() => textEl.classList.add("is-shown"));
-    }
-    closeBtn?.focus?.();
-  };
+  const buttons = [...root.querySelectorAll(".lock-note-btn")];
+  const panels = [...root.querySelectorAll(".lock-note-panel")];
+  if (!buttons.length || !panels.length) return;
 
-  const close = () => {
-    button.classList.remove("is-active");
+  const panelFor = (name) => panels.find((p) => p.dataset.notePanel === name) || null;
+  let active = null;
+
+  const close = (restoreFocus = true) => {
+    if (!active) return false;
+    const { panel, button, textEl } = active;
     panel.classList.remove("is-open");
-    backdrop.classList.remove("is-open");
     panel.setAttribute("aria-hidden", "true");
-    button.focus?.();
+    backdrop.classList.remove("is-open");
+    button?.classList.remove("is-active");
+    if (textEl) textEl.classList.remove("is-shown");
+    active = null;
+    if (restoreFocus) button?.focus?.();
     return true;
   };
 
-  button.addEventListener("click", open);
-  closeBtn?.addEventListener("click", close);
-  backdrop.addEventListener("click", close);
-  panel._close = close;
-  panel._isOpen = () => panel.classList.contains("is-open");
+  buttons.forEach((button) => {
+    button.addEventListener("click", () => {
+      const panel = panelFor(button.dataset.note);
+      if (!panel) return;
+
+      // Only one panel at a time.
+      close(false);
+
+      const textEl = panel.querySelector(".lock-note-text");
+      button.classList.add("is-active");
+      panel.classList.add("is-open");
+      panel.setAttribute("aria-hidden", "false");
+      backdrop.classList.add("is-open");
+      active = { panel, button, textEl };
+
+      // Re-trigger the blur-to-sharp reveal every time it opens.
+      if (textEl) {
+        textEl.classList.remove("is-shown");
+        void textEl.offsetWidth;
+        requestAnimationFrame(() => textEl.classList.add("is-shown"));
+      }
+      panel.querySelector(".lock-note-close")?.focus?.();
+    });
+  });
+
+  panels.forEach((panel) => {
+    panel.querySelector(".lock-note-close")?.addEventListener("click", () => close());
+  });
+  backdrop.addEventListener("click", () => close());
+
+  // Shared hooks used by the ESC handler in the mount.
+  root._closeNote = () => close();
+  root._noteIsOpen = () => !!active;
 }
 
 /* ---- journey ---- */
@@ -1005,6 +1100,85 @@ async function refreshToday(root, options = {}) {
 
 let currentUser = "";
 
+/* ------------------------------------------------------------------ */
+/* Presence — heartbeat + live status                                  */
+/* ------------------------------------------------------------------ */
+
+/* While a trusted user is on the page we send a heartbeat so the server
+   keeps their "last seen" fresh. Online/offline is DECIDED BY THE SERVER
+   from heartbeat freshness vs server time — the browser clock is never
+   trusted and the client can never mark itself online in the data. */
+const HEARTBEAT_INTERVAL_MS = 20 * 1000;   // 20s — well inside the 60s window
+const PRESENCE_POLL_INTERVAL_MS = 15 * 1000; // refresh the partner's state
+
+let heartbeatTimer = 0;
+let presencePollTimer = 0;
+let presenceVisibleHandler = null;
+
+async function sendHeartbeat(online = true) {
+  try {
+    await apiPost("/setPresence", { online });
+  } catch (error) {
+    // Presence is best-effort; never surface a failure to the visitor.
+    console.debug("Presence heartbeat failed:", error);
+  }
+}
+
+/* Fetches the server-derived summary and paints it into whichever
+   presence surfaces are currently mounted (account cards / lock header). */
+async function refreshPresenceUi() {
+  try {
+    const data = await apiGet("/getPresenceSummary");
+    renderPresenceStatus(data);
+  } catch (error) {
+    console.debug("Presence refresh failed:", error);
+  }
+}
+
+function startPresence(root) {
+  // 1) Immediate heartbeat — do NOT wait for the first interval tick.
+  sendHeartbeat(true);
+
+  heartbeatTimer = setInterval(() => {
+    if (document.hidden) return; // paused in the background
+    sendHeartbeat(true);
+  }, HEARTBEAT_INTERVAL_MS);
+
+  presencePollTimer = setInterval(() => {
+    if (document.hidden) return;
+    refreshPresenceUi();
+  }, PRESENCE_POLL_INTERVAL_MS);
+
+  // Immediate refresh + heartbeat when the tab becomes visible again.
+  presenceVisibleHandler = () => {
+    if (document.hidden) return;
+    sendHeartbeat(true);
+    refreshPresenceUi();
+  };
+  document.addEventListener("visibilitychange", presenceVisibleHandler);
+  window.addEventListener("focus", presenceVisibleHandler);
+
+  // Best-effort hint when leaving. The server treats this as a hint only —
+  // heartbeat expiry is the authoritative offline signal.
+  root._presenceLeaveHint = () => sendHeartbeat(false);
+  window.addEventListener("pagehide", root._presenceLeaveHint);
+  window.addEventListener("beforeunload", root._presenceLeaveHint);
+}
+
+function stopPresence(root) {
+  if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = 0; }
+  if (presencePollTimer) { clearInterval(presencePollTimer); presencePollTimer = 0; }
+  if (presenceVisibleHandler) {
+    document.removeEventListener("visibilitychange", presenceVisibleHandler);
+    window.removeEventListener("focus", presenceVisibleHandler);
+    presenceVisibleHandler = null;
+  }
+  if (root?._presenceLeaveHint) {
+    window.removeEventListener("pagehide", root._presenceLeaveHint);
+    window.removeEventListener("beforeunload", root._presenceLeaveHint);
+  }
+}
+
 function onAnswerConfirmed(root, payload) {
   void payload;
   // The card has ALREADY been finalized in-place after the backend
@@ -1031,6 +1205,14 @@ async function loadJourney(root) {
     renderJourney(root, journey, (date, trigger) => openDay(root, date, trigger));
   } catch (error) {
     console.error("Failed to load journey:", error);
+    // Never leave a silent blank section — show a deliberate state.
+    const container = root.querySelector(".lock-months");
+    if (container && container.childElementCount === 0) {
+      const notice = document.createElement("p");
+      notice.className = "lock-questions-empty";
+      notice.textContent = "تعذر تحميل رحلة الأيام، حاولي تحدّثي الصفحة.";
+      container.appendChild(notice);
+    }
   }
 }
 
@@ -1070,6 +1252,9 @@ export async function mountRelationshipLock(mountEl, options = {}) {
   renderCountdown(root);
   initNotePanel(root);
 
+  // Presence: immediate heartbeat + periodic refresh of the partner's state.
+  startPresence(root);
+
   // Reveal sequence: phrases appear one after another, then the sweep,
   // then the subtitle settles in beneath the message.
   const phrases = [...root.querySelectorAll(".lock-phrase")];
@@ -1086,7 +1271,10 @@ export async function mountRelationshipLock(mountEl, options = {}) {
   );
   // Subtitle + note + countdown enter as one continuous scene.
   setTimeout(() => root.querySelector(".lock-subtitle")?.classList.add("is-shown"), phraseEnd);
-  setTimeout(() => root.querySelector(".lock-note-btn")?.classList.add("is-shown"), phraseEnd + (reduced ? 60 : 220));
+  setTimeout(() => {
+    root.querySelectorAll(".lock-note-btn").forEach((btn, i) =>
+      setTimeout(() => btn.classList.add("is-shown"), i * 140));
+  }, phraseEnd + (reduced ? 60 : 220));
   setTimeout(() => root.querySelector(".lock-countdown-section")?.classList.add("is-shown"), phraseEnd + (reduced ? 120 : 420));
 
   root.classList.add("is-ready");
@@ -1105,11 +1293,11 @@ export async function mountRelationshipLock(mountEl, options = {}) {
     setTimeout(() => section.classList.add("is-shown"), reduced ? 200 : 600 + index * 180);
   });
 
-  // ESC closes whichever panel is open.
+  // ESC closes whichever panel is open (notes first, then day detail).
   const onKey = (event) => {
     if (event.key === "Escape") {
-      if (root.querySelector(".lock-note-panel")?._isOpen?.()) {
-        root.querySelector(".lock-note-panel")._close?.();
+      if (root._noteIsOpen?.()) {
+        root._closeNote?.();
         return;
       }
       root.querySelector(".lock-day-panel")?._close?.();
@@ -1117,8 +1305,13 @@ export async function mountRelationshipLock(mountEl, options = {}) {
   };
   document.addEventListener("keydown", onKey);
 
+  // Paint the initial presence immediately (server data from the session).
+  if (state.presence) renderPresenceStatus(state.presence);
+  refreshPresenceUi();
+
   root._teardown = () => {
     stopCountdown();
+    stopPresence(root);
     document.removeEventListener("keydown", onKey);
     root._teardownParticles?.();
     root._teardownFireworks?.();

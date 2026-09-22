@@ -1282,6 +1282,7 @@ async function loadJourney(root) {
       "تعذر تحميل رحلة الأيام. تأكدي من الاتصال وحاولي تاني.",
       () => loadJourney(root)
     );
+  }
 }
 
 // Allow the Today retry to also refresh the journey without a page reload.

@@ -393,7 +393,16 @@ function isSecureRequest(request) {
    This is what makes claim-based bypass impossible on the client. */
 function isCrossSiteRequest(request) {
   const origin = requestOrigin(request);
-  if (!origin) return false;
+  if (!origin) {
+    // No Origin header: cannot determine if cross-site. When the request is
+    // over HTTPS, be conservative and treat it as cross-site (SameSite=None),
+    // because modern browsers/privacy settings may strip Origin on
+    // cross-origin requests — and the API is always HTTPS in production
+    // while the frontend lives on a different host (github.io). Using
+    // SameSite=Strict here would cause the session cookie to be DROPPED
+    // silently, breaking all authenticated calls.
+    return isSecureRequest(request);
+  }
   try {
     const originHost = new URL(origin).hostname;
     const requestHost = request.url ? new URL(request.url).hostname : "";

@@ -21,7 +21,7 @@ const API_BASE = "https://ourheartfunctions2026.azurewebsites.net/api";
    it for the staggered reveal; the text itself is unchanged). */
 const MAIN_MESSAGE =
   "تم ايقاف الويب يا روحي انتي , بحبك يا حياتي, هيظرهلك سؤال هتدخلي تجاوبي عليه كل يوم يا صغننه " +
-  "وانا هيبقي عندي سؤال هدخل اجاوب عليه كل يوم يا قلبي انا وبالنسبه هنقول لبعض تصبح علي غير ازاي " +
+  "وانا هيبقي عندي سؤال هدخل اجاوب عليه كل يوم يا قلبي انا وبالنسبه هنقول لبعث تصبح علي خير ازاي " +
   "هتبقي نوت علي الانستا يا صغننه قبل ما ننام";
 
 /* Smaller, softer line that settles in just under the main message. */
@@ -1273,16 +1273,15 @@ async function loadJourney(root) {
   } catch (error) {
     const status = Number((/->\s*(\d{3})/.exec(error?.message || "") || [])[1]) || 0;
     logApiIssue("JOURNEY_FETCH_FAILED", { status });
-    // Never leave a silent blank section — show a deliberate state + retry.
-    if (container && container.childElementCount === 0) {
-      renderSectionState(
-        container,
-        "error",
-        "تعذر تحميل رحلة الأيام. تأكدي من الاتصال وحاولي تاني.",
-        () => loadJourney(root)
-      );
-    }
-  }
+    // Never leave a silent blank section — replace whatever state was shown
+    // (loading spinner, empty, or a prior error) with a deliberate error +
+    // retry. renderSectionState calls replaceChildren() internally.
+    renderSectionState(
+      container,
+      "error",
+      "تعذر تحميل رحلة الأيام. تأكدي من الاتصال وحاولي تاني.",
+      () => loadJourney(root)
+    );
 }
 
 // Allow the Today retry to also refresh the journey without a page reload.

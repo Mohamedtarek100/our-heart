@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Our Heart</title>
+  <script>
+    // Immediate redirect to production
+    try {
+      // Store the redirect for analytics if needed
+      sessionStorage.setItem('redirectFrom', window.location.origin);
+    } catch {}
+    // Redirect immediately
+    window.location.replace('https://ourheart-app.azurewebsites.net/');
+  </script>
+  <meta http-equiv="refresh" content="0;url=https://ourheart-app.azurewebsites.net/">
+</head>
+<body style="font-family:Arial;text-align:center;padding:40px;background:#080d1b;color:white;">
+  <div style="max-width:400px;margin:0 auto;">
+    <div style="font-size:48px;margin-bottom:16px;">♥</div>
+    <h1 style="margin:8px 0;">Our Heart</h1>
+    <p style="color:rgba(255,255,255,0.7);">جارِ تحويلك إلى الموقع الرئيسي...</p>
+    <p style="color:rgba(255,255,255,0.5);font-size:13px;margin-top:16px;">
+      If you are not redirected automatically, <a href="https://ourheart-app.azurewebsites.net/" style="color:#ff7aa9;">click here</a>.
+    </p>
+  </div>
+  <script>
+    // Fallback redirect after 2 seconds if JavaScript redirect didn't work
+    setTimeout(() => {
+      window.location.href = 'https://ourheart-app.azurewebsites.net/';
+    }, 2000);
+  </script>
+</body>
+</html>

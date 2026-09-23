@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="ar" dir="rtl">
 
 <head>
@@ -7,7 +7,14 @@
 <meta name="theme-color" content="#080d1b">
 <meta name="robots" content="noindex, nofollow, noarchive, nosnippet, noimageindex">
 <meta name="referrer" content="no-referrer">
-<title>❤️ Our Heart</title>
+<title>Our Heart</title>
+<script>
+const legacyGitHubHosts = ["mohamdtarek100.github.io", "mohamedtarek100.github.io"];
+if (legacyGitHubHosts.includes(location.hostname) && location.pathname.startsWith("/our-heart")) {
+  location.replace("https://ourheart-app.azurewebsites.net/");
+}
+</script>
+<noscript><meta http-equiv="refresh" content="0;url=https://ourheart-app.azurewebsites.net/"></noscript>
 
 <link
 rel="stylesheet"
@@ -16,7 +23,7 @@ href="style.css?v=4.9"
 
 <link
 rel="stylesheet"
-href="lock.css?v=5"
+href="lock.css?v=6"
 >
 
 </head>
@@ -152,7 +159,7 @@ Mohamed
 
 <button onclick="updateStatus('mohamed','انا مش كويس 🥺')">
 
- انا مش كويس 🥺
+انا مش كويس 🥺
 
 </button>
 
@@ -305,7 +312,7 @@ NoNa
 	<div id="recordingOverlay" class="recordingOverlay" hidden aria-live="polite">
 		<span class="recordingCancelLabel">← Slide to cancel</span>
 		<strong id="recordingOverlayTimer">0:00</strong>
-		<span id="recordingOverlayHint">Slide left to cancel</span>
+		<span id="recordingOverlayHint">Slide to cancel</span>
 	</div>
 </div>
 
@@ -346,7 +353,7 @@ NoNa
 
   <script
   type="module"
-  src="access.js?v=13"
+  src="access.js?v=16"
   ></script>
 
 </body>

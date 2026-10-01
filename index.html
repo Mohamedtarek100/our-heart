@@ -1,0 +1,356 @@
+﻿<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#080d1b">
+<meta name="robots" content="noindex, nofollow, noarchive, nosnippet, noimageindex">
+<meta name="referrer" content="no-referrer">
+<title>Our Heart</title>
+<base href="/our-heart-pages/">
+
+<link
+rel="stylesheet"
+href="style.css?v=5.0"
+>
+
+<link
+rel="stylesheet"
+  href="lock.css?v=10"
+>
+
+</head>
+
+<body>
+<script src="supabase-public-config.js"></script>
+
+
+<!-- ============================================================
+     APPLICATION ROOT
+     ------------------------------------------------------------
+     NOTHING authenticated is mounted here. The pre-trust DOM below
+     contains ONLY:
+       - a neutral boot/checking shell
+       - the Access Gate mount point
+     Every authenticated surface (account picker, chat, footer
+     controls, Love Intro, Change Account) is defined inside
+     <template> elements and is only cloned into the DOM after the
+     backend confirms a trusted session. It is therefore not merely
+     hidden with CSS — it does not exist before trust.
+     ============================================================ -->
+
+<div id="appRoot">
+
+	<section id="bootState" class="bootState" aria-live="polite">
+		<div class="bootHeart" aria-hidden="true">❤️</div>
+		<p class="bootLabel">جارٍ التحقق من أمان هذه المساحة…</p>
+	</section>
+
+	<!-- The Access Gate is mounted here (only while untrusted). -->
+	<div id="accessGateMount"></div>
+
+	<!-- The Relationship Lock experience is mounted here (trusted + locked). -->
+	<div id="lockMount"></div>
+
+	<!-- The normal authenticated application is mounted here (trusted + unlocked). -->
+	<div id="appMount"></div>
+
+</div>
+
+
+<!-- ============================================================
+     AUTHENTICATED APPLICATION TEMPLATE (not mounted until trusted)
+     ============================================================ -->
+
+<template id="tplAppShell">
+
+<!-- اختيار الحساب -->
+
+<div id="userSelector">
+
+<h1>
+
+❤️ اختر حسابك ❤️
+
+</h1>
+
+<button id="mohamedBtn">
+
+❤️ Mohamed
+
+</button>
+
+<button id="yomnaBtn">
+
+❤️ Yomna
+
+</button>
+
+</div>
+
+<!-- التطبيق -->
+
+<div id="mainApp">
+
+
+<h1>
+
+❤️ our life ❤️
+
+</h1>
+
+
+
+<div class="container">
+
+
+<!-- بطاقة محمد -->
+
+<div class="card">
+
+<h2>
+
+Mohamed
+
+</h2>
+
+
+<div class="buttons">
+
+<button onclick="updateStatus('mohamed','🏢 نازل الشغل يا عمري انا')">
+
+🏢 نازل الشغل يا عمري انا
+
+</button>
+
+
+<button onclick="updateStatus('mohamed','🍽️ هتغدي يا قلبي ')">
+
+🍽️ هتغدي يا قلبي
+
+</button>
+
+<button onclick="updateStatus('mohamed','نازل اجيب حجات من تحت قطتي 🫂')">
+
+نازل اجيب حجات من تحت قطتي 🫂
+
+</button>
+
+
+
+<button onclick="updateStatus('mohamed','🏠 وصلت البيت يا صغنوثه')">
+
+🏠 وصلت البيت يا صغنوثه
+
+</button>
+
+
+<button onclick="updateStatus('mohamed','😴 هنام يا نونتي ')">
+
+😴 هنام يا نونتي
+
+</button>
+
+<button onclick="updateStatus('mohamed','انا مش كويس 🥺')">
+
+انا مش كويس 🥺
+
+</button>
+
+<button onclick="updateStatus('mohamed','❤️ انا كويس يا روحي ')">
+
+❤️ انا كويس يا روحي
+
+</button>
+
+</div>
+
+
+<h3>
+
+آخر حالة
+
+</h3>
+
+
+<p id="mohamedStatus" aria-live="polite">
+
+</p>
+
+</div>
+
+
+
+
+
+<!-- بطاقة يمنى -->
+
+<div class="card">
+
+<h2>
+
+NoNa
+
+</h2>
+
+
+<div class="buttons">
+
+<button onclick="updateStatus('yomna','📚 نازله الدرس يا حبيبي ')">
+
+📚 نازله الدرس يا حبيبي
+
+</button>
+
+
+<button onclick="updateStatus('yomna','🍽️ هتغدي يا قلبي ')">
+
+🍽️ هتغدي يا قلبي
+
+</button>
+
+<button onclick="updateStatus('yomna','نازله اشتري حجات من تحت حبيبي 🫂 ')">
+
+نازله اشتري حجات من تحت حبيبي 🫂
+
+</button>
+
+
+<button onclick="updateStatus('yomna','🏠 وصلت البيت يا بيبي')">
+
+🏠 وصلت البيت يا بيبي
+
+</button>
+
+
+<button onclick="updateStatus('yomna','😴 هنام يا حبيبي ')">
+
+😴 هنام يا حبيبي
+
+</button>
+
+
+<button onclick="updateStatus('yomna','انا مش كويسه🥺')">
+
+انا مش كويسه🥺
+
+</button>
+
+<button onclick="updateStatus('yomna','❤️ أنا كويسه كتكوتي')">
+
+❤️ أنا كويسه كتكوتي
+
+</button>
+
+</div>
+
+
+<h3>
+
+آخر حالة
+
+</h3>
+
+
+<p id="yomnaStatus" aria-live="polite">
+
+</p>
+
+</div>
+
+
+</div>
+
+
+
+<section id="chatWorkspace" class="chatWorkspace">
+	<header class="chatHeader">
+		<div class="chatIdentity">
+			<div id="partnerAvatar" class="partnerAvatar" aria-hidden="true">♥</div>
+			<div class="chatIdentityCopy">
+				<strong id="partnerName">Our Heart</strong>
+				<span id="partnerState"><span id="onlineStatus"></span><span id="typingStatus"></span></span>
+			</div>
+		</div>
+		<button id="chatExpandButton" class="chatExpandButton" type="button" aria-label="Expand chat" aria-pressed="false">⛶</button>
+	</header>
+<div id="chatBox">
+
+</div>
+
+<button id="newMessagesIndicator" class="newMessagesIndicator" type="button" hidden>
+	<span aria-hidden="true">↓</span>
+	<span>New messages</span>
+</button>
+
+<div id="replyPreview" class="replyPreview" hidden>
+	<span class="replyPreviewBar" aria-hidden="true"></span>
+	<div class="replyPreviewCopy">
+		<strong class="replyPreviewSender"></strong>
+		<span class="replyPreviewText"></span>
+	</div>
+	<button type="button" class="replyPreviewClose" onclick="cancelReply()" aria-label="Cancel reply">×</button>
+</div>
+
+<div class="composerTools" aria-label="Message tools">
+	<button id="stickerBtn" type="button" aria-label="Open stickers">☺</button>
+	<button id="gifBtn" type="button" aria-label="Open GIFs">GIF</button>
+	<textarea id="messageInput" placeholder="اكتب رسالة..." aria-label="Message" oninput="typing()"></textarea>
+	<button id="sendBtn" type="button" onclick="sendMessage()" aria-label="Send message">↗</button>
+	<button id="recordBtn" type="button" aria-label="Record voice message">
+		<span aria-hidden="true">🎤</span>
+		<span id="recordingLabel">Hold to record</span>
+		<span id="recordingTimer" hidden>0:00</span>
+		<span id="recordingCancelHint" hidden>Slide left to cancel</span>
+	</button>
+	<div id="recordingOverlay" class="recordingOverlay" hidden aria-live="polite">
+		<span class="recordingCancelLabel">← Slide to cancel</span>
+		<strong id="recordingOverlayTimer">0:00</strong>
+		<span id="recordingOverlayHint">Slide to cancel</span>
+	</div>
+</div>
+
+<div id="mediaPicker" class="mediaPicker" hidden>
+	<div class="mediaPickerHeader">
+		<strong id="mediaPickerTitle">Stickers</strong>
+		<button id="mediaPickerClose" type="button" aria-label="Close picker">×</button>
+	</div>
+	<input id="mediaSearchInput" type="search" placeholder="Search" aria-label="Search stickers or GIFs">
+	<div id="mediaResults" class="mediaResults" role="listbox" aria-label="Media results"></div>
+	<p id="mediaPickerStatus" class="mediaPickerStatus" aria-live="polite"></p>
+</div>
+
+</section>
+
+</div>
+
+<div class="footerActions">
+
+<button id="loveIntroButton" type="button" onclick="replayLoveIntro()" aria-label="Replay the love intro animation">
+❤️ Love Intro
+</button>
+
+<button id="changeAccountButton" type="button" onclick="changeUser()">
+🔄 change account
+</button>
+
+</div>
+
+<footer class="siteFooter">
+	<span>© 2026 Yomna &amp; Mohamed. All rights reserved.</span>
+	<span>· v1.0.0</span>
+</footer>
+
+</div>
+
+</template>
+
+  <script
+  type="module"
+  src="access.js?v=27"
+  ></script>
+
+</body>
+
+</html>

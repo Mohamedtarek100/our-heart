@@ -1525,6 +1525,24 @@
 #relationshipLock .lock-month.is-future-month { opacity: .5; }
 #relationshipLock .lock-month.is-future-month .lock-month-head { cursor: default; }
 
+/* Reconstructed recovery month (Sep 21-30, 2026) — visually distinct so the
+   recovery days are clearly identified as reconstructed recovery data. */
+#relationshipLock .lock-month.is-recovery-month {
+	border-style: dashed;
+}
+#relationshipLock .lock-month-recovery-label {
+	margin: 0;
+	padding: 6px 14px;
+	font-size: 11px;
+	letter-spacing: .08em;
+	text-transform: uppercase;
+	color: var(--lock-muted);
+}
+#relationshipLock .lock-day.is-recovery {
+	border-style: dashed;
+}
+#relationshipLock .lock-day.is-recovery .lock-day-chip { opacity: .9; }
+
 /* ============================================================
     FOOTER / CONTROLS inside the lock
     ============================================================ */
